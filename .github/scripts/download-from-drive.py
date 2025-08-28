@@ -11,8 +11,7 @@ from googleapiclient.http import MediaIoBaseDownload
 SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
 
 # Your Google Drive folder ID (we'll need to get this)
-DRIVE_FOLDER_ID = 'YOUR_FOLDER_ID_HERE'  # Replace with actual folder ID
-
+DRIVE_FOLDER_ID = '1zsijSWM7vOVlqjV0F0BztnH3BbX6oHio'  # JLU Raw folder
 def authenticate_google_drive():
     """Authenticate with Google Drive API using stored credentials"""
     creds = None
