@@ -1,0 +1,37 @@
+name: Update JLU Data Files
+
+on:
+  schedule:
+    - cron: '0 15 * * *'  # Run daily at 3 PM (after your script runs)
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  update-data:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        
+    - name: Install dependencies
+      run: |
+        pip install google-auth google-auth-oauthlib google-auth-httplib2 google-api-python-client
+        
+    - name: Download files from Google Drive
+      env:
+        GOOGLE_DRIVE_CREDENTIALS: ${{ secrets.GOOGLE_DRIVE_CREDENTIALS }}
+      run: |
+        python .github/scripts/download-from-drive.py
+        
+    - name: Commit and push changes
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add public/data/
+        git diff --staged --quiet || git commit -m "Update JLU data files - $(date)"
+        git push
