@@ -10,36 +10,249 @@
 <body>
     <div id="root"></div>
     <script>
-        // Wait for React to load before executing
         window.addEventListener('load', function() {
-            console.log('React loaded:', typeof React);
-            console.log('ReactDOM loaded:', typeof ReactDOM);
-            
-            if (typeof React === 'undefined') {
-                document.getElementById('root').innerHTML = '<div style="color:red;padding:20px;">React failed to load</div>';
-                return;
-            }
+            const { useState, useEffect } = React;
             
             const Dashboard = () => {
-                const urlParams = new URLSearchParams(window.location.search);
-                const store = urlParams.get('store') || '609';
+                const [currentTime, setCurrentTime] = useState(new Date());
+                const [employees, setEmployees] = useState([]);
+                const [storeInfo, setStoreInfo] = useState({});
+                const [loading, setLoading] = useState(true);
                 
-                return React.createElement('div', {
-                    className: 'min-h-screen bg-red-900 text-white flex flex-col items-center justify-center p-8'
-                },
-                    React.createElement('h1', { className: 'text-4xl font-bold mb-4' }, `Store ${store} Dashboard`),
-                    React.createElement('p', { className: 'text-xl mb-8' }, 'JLU Certification Status'),
-                    React.createElement('div', { className: 'bg-red-700 p-4 rounded' },
-                        React.createElement('p', null, 'Dashboard is working! URL parameter detected.')
-                    ),
-                    React.createElement('div', { className: 'mt-4 space-x-2' },
-                        ['609', '1002', '1257', '1270'].map(storeNum =>
-                            React.createElement('a', {
-                                key: storeNum,
-                                href: `?store=${storeNum}`,
-                                className: 'bg-white text-red-900 px-3 py-1 rounded mr-2'
-                            }, `Store ${storeNum}`)
+                const urlParams = new URLSearchParams(window.location.search);
+                const currentStore = urlParams.get('store') || '609';
+                const franchiseView = urlParams.get('franchise') === 'true';
+                
+                // Update time every second
+                useEffect(() => {
+                    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+                    return () => clearInterval(timer);
+                }, []);
+                
+                // Load data when component mounts
+                useEffect(() => {
+                    setTimeout(() => {
+                        if (franchiseView) {
+                            setStoreInfo({
+                                totalStores: 8,
+                                totalEmployees: 160,
+                                overallCompliance: 94
+                            });
+                            setEmployees([]);
+                        } else {
+                            setStoreInfo({
+                                storeNumber: currentStore,
+                                districtManager: "Benjamin Braasch DM",
+                                totalEmployees: 20,
+                                dashboardScore: 95
+                            });
+                            
+                            // Sample data by store
+                            const storeData = {
+                                '609': [
+                                    { name: "MORALES, ANDY", position: "Service Tech", daysUntilExpiry: -2, status: "critical" },
+                                    { name: "AVALOS, RAMON", position: "Technician", daysUntilExpiry: 25, status: "warning" },
+                                    { name: "RUIZ, ERIC", position: "Manager", daysUntilExpiry: 180, status: "good" }
+                                ],
+                                '1002': [
+                                    { name: "CUGUA, MYNOR", position: "Technician", daysUntilExpiry: 42, status: "warning" },
+                                    { name: "BLACK, DEVIN", position: "Upper Bay Tech", daysUntilExpiry: 207, status: "good" }
+                                ],
+                                '1257': [
+                                    { name: "HERNANDEZ, BRYAN", position: "Lower Bay Tech", daysUntilExpiry: 44, status: "warning" },
+                                    { name: "CENDEJAS, DEANNA", position: "CSA", daysUntilExpiry: null, status: "missing" }
+                                ]
+                            };
+                            
+                            setEmployees(storeData[currentStore] || []);
+                        }
+                        setLoading(false);
+                    }, 1000);
+                }, [currentStore, franchiseView]);
+                
+                const criticalEmployees = employees.filter(emp => emp.status === 'critical' || emp.status === 'missing');
+                const warningEmployees = employees.filter(emp => emp.status === 'warning');
+                const goodEmployees = employees.filter(emp => emp.status === 'good');
+                
+                if (loading) {
+                    return React.createElement('div', {
+                        className: 'min-h-screen bg-gradient-to-br from-red-900 via-red-800 to-red-900 text-white flex items-center justify-center'
+                    },
+                        React.createElement('div', { className: 'text-center' },
+                            React.createElement('div', { className: 'text-3xl font-bold mb-4' }, 
+                                franchiseView ? 'Loading Franchise Dashboard...' : `Loading Store ${currentStore}...`
+                            ),
+                            React.createElement('div', { className: 'text-red-200' }, 'Processing certification data...')
                         )
+                    );
+                }
+                
+                if (franchiseView) {
+                    return React.createElement('div', {
+                        className: 'min-h-screen bg-gradient-to-br from-blue-900 via-blue-800 to-blue-900 text-white p-4'
+                    },
+                        // Franchise header
+                        React.createElement('div', { className: 'mb-6' },
+                            React.createElement('div', { className: 'flex items-center justify-between' },
+                                React.createElement('div', { className: 'flex items-center space-x-4' },
+                                    React.createElement('div', { className: 'bg-white rounded-lg p-3' },
+                                        React.createElement('div', { className: 'text-blue-800 font-bold text-lg' }, 'JLU')
+                                    ),
+                                    React.createElement('div', null,
+                                        React.createElement('h1', { className: 'text-3xl font-bold' }, 'Franchise Dashboard'),
+                                        React.createElement('p', { className: 'text-blue-200' }, 'Company-wide Overview')
+                                    )
+                                ),
+                                React.createElement('div', { className: 'text-right' },
+                                    React.createElement('div', { className: 'text-xl font-mono' }, currentTime.toLocaleTimeString()),
+                                    React.createElement('div', { className: 'text-blue-200' }, currentTime.toLocaleDateString())
+                                )
+                            )
+                        ),
+                        React.createElement('div', { className: 'text-center py-20' },
+                            React.createElement('div', { className: 'text-2xl mb-4' }, 'Franchise Analytics Coming Soon'),
+                            React.createElement('a', {
+                                href: '?store=609',
+                                className: 'bg-white text-blue-800 px-6 py-2 rounded font-bold hover:bg-blue-100'
+                            }, 'View Individual Stores')
+                        )
+                    );
+                }
+                
+                // Store dashboard
+                return React.createElement('div', {
+                    className: 'min-h-screen bg-gradient-to-br from-red-900 via-red-800 to-red-900 text-white p-4'
+                },
+                    // Header
+                    React.createElement('div', { className: 'mb-6' },
+                        React.createElement('div', { className: 'flex items-center justify-between' },
+                            React.createElement('div', { className: 'flex items-center space-x-4' },
+                                React.createElement('div', { className: 'bg-white rounded-lg p-3' },
+                                    React.createElement('div', { className: 'text-red-800 font-bold text-lg' }, 'JLU')
+                                ),
+                                React.createElement('div', null,
+                                    React.createElement('h1', { className: 'text-3xl font-bold' }, `Store ${currentStore} Certification Dashboard`),
+                                    React.createElement('p', { className: 'text-red-200' }, `DM: ${storeInfo.districtManager}`)
+                                )
+                            ),
+                            React.createElement('div', { className: 'text-right' },
+                                React.createElement('div', { className: 'text-xl font-mono' }, currentTime.toLocaleTimeString()),
+                                React.createElement('div', { className: 'text-red-200' }, currentTime.toLocaleDateString())
+                            )
+                        )
+                    ),
+                    
+                    // Navigation
+                    React.createElement('div', { className: 'mb-6 flex flex-wrap gap-2' },
+                        ['609', '1002', '1257', '1270', '1396', '1932', '2911', '4182'].map(store =>
+                            React.createElement('a', {
+                                key: store,
+                                href: `?store=${store}`,
+                                className: `px-3 py-1 rounded text-sm ${store === currentStore ? 'bg-white text-red-800' : 'bg-white/20 hover:bg-white/30'}`
+                            }, `Store ${store}`)
+                        ),
+                        React.createElement('a', {
+                            href: '?franchise=true',
+                            className: 'px-3 py-1 rounded text-sm bg-blue-500/20 hover:bg-blue-500/30'
+                        }, 'Franchise View')
+                    ),
+                    
+                    // Metrics
+                    React.createElement('div', { className: 'grid grid-cols-4 gap-4 mb-6' },
+                        React.createElement('div', { className: 'bg-white/10 backdrop-blur-sm rounded-xl p-4' },
+                            React.createElement('div', { className: 'text-2xl font-bold' }, storeInfo.totalEmployees),
+                            React.createElement('div', { className: 'text-sm text-white/70' }, 'Total Employees')
+                        ),
+                        React.createElement('div', { className: 'bg-white/10 backdrop-blur-sm rounded-xl p-4' },
+                            React.createElement('div', { className: 'text-2xl font-bold text-red-400' }, criticalEmployees.length),
+                            React.createElement('div', { className: 'text-sm text-white/70' }, 'Critical/Missing')
+                        ),
+                        React.createElement('div', { className: 'bg-white/10 backdrop-blur-sm rounded-xl p-4' },
+                            React.createElement('div', { className: 'text-2xl font-bold text-yellow-400' }, warningEmployees.length),
+                            React.createElement('div', { className: 'text-sm text-white/70' }, 'Expiring Soon')
+                        ),
+                        React.createElement('div', { className: 'bg-white/10 backdrop-blur-sm rounded-xl p-4' },
+                            React.createElement('div', { className: 'text-2xl font-bold text-green-400' }, goodEmployees.length),
+                            React.createElement('div', { className: 'text-sm text-white/70' }, 'Current & Good')
+                        )
+                    ),
+                    
+                    // Employee sections
+                    React.createElement('div', { className: 'grid grid-cols-2 gap-6' },
+                        // Critical section
+                        React.createElement('div', { className: 'bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-red-300/50' },
+                            React.createElement('h2', { className: 'text-xl font-bold text-red-400 mb-4 flex items-center' },
+                                React.createElement('span', { className: 'mr-2' }, '🚨'),
+                                'CRITICAL ATTENTION REQUIRED'
+                            ),
+                            React.createElement('div', { className: 'space-y-3 max-h-64 overflow-y-auto' },
+                                criticalEmployees.length > 0 ? 
+                                    criticalEmployees.map((employee, index) => 
+                                        React.createElement('div', { 
+                                            key: index, 
+                                            className: 'bg-red-500/20 rounded-lg p-3 border border-red-400/30'
+                                        },
+                                            React.createElement('div', { className: 'flex justify-between items-center' },
+                                                React.createElement('div', null,
+                                                    React.createElement('div', { className: 'font-semibold' }, employee.name),
+                                                    React.createElement('div', { className: 'text-sm text-red-200' }, employee.position)
+                                                ),
+                                                React.createElement('div', { className: 'text-right' },
+                                                    employee.status === 'missing' ?
+                                                        React.createElement('div', { className: 'text-red-400 font-bold' }, 'NOT CERTIFIED') :
+                                                        React.createElement('div', null,
+                                                            React.createElement('div', { className: 'text-red-400 font-bold' }, 
+                                                                employee.daysUntilExpiry <= 0 ? 'EXPIRED' : `${employee.daysUntilExpiry} DAYS`
+                                                            ),
+                                                            React.createElement('div', { className: 'text-xs text-red-300' }, 'Past Due')
+                                                        )
+                                                )
+                                            )
+                                        )
+                                    ) :
+                                    React.createElement('div', { className: 'text-center text-green-300 py-8' },
+                                        React.createElement('div', { className: 'text-2xl mb-2' }, '✅'),
+                                        React.createElement('div', null, 'No critical certifications!')
+                                    )
+                            )
+                        ),
+                        
+                        // Warning section
+                        React.createElement('div', { className: 'bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-yellow-300/50' },
+                            React.createElement('h2', { className: 'text-xl font-bold text-yellow-400 mb-4 flex items-center' },
+                                React.createElement('span', { className: 'mr-2' }, '⚠️'),
+                                'EXPIRING SOON (30-60 Days)'
+                            ),
+                            React.createElement('div', { className: 'space-y-3 max-h-64 overflow-y-auto' },
+                                warningEmployees.length > 0 ? 
+                                    warningEmployees.map((employee, index) => 
+                                        React.createElement('div', { 
+                                            key: index, 
+                                            className: 'bg-yellow-500/20 rounded-lg p-3 border border-yellow-400/30'
+                                        },
+                                            React.createElement('div', { className: 'flex justify-between items-center' },
+                                                React.createElement('div', null,
+                                                    React.createElement('div', { className: 'font-semibold' }, employee.name),
+                                                    React.createElement('div', { className: 'text-sm text-yellow-200' }, employee.position)
+                                                ),
+                                                React.createElement('div', { className: 'text-right' },
+                                                    React.createElement('div', { className: 'text-yellow-400 font-bold' }, `${employee.daysUntilExpiry} DAYS`),
+                                                    React.createElement('div', { className: 'text-xs text-yellow-300' }, 'Until Expiry')
+                                                )
+                                            )
+                                        )
+                                    ) :
+                                    React.createElement('div', { className: 'text-center text-green-300 py-8' },
+                                        React.createElement('div', { className: 'text-2xl mb-2' }, '✅'),
+                                        React.createElement('div', null, 'No upcoming expirations!')
+                                    )
+                            )
+                        )
+                    ),
+                    
+                    // Footer
+                    React.createElement('div', { className: 'mt-6 text-center text-white/60 text-sm' },
+                        `Last Updated: ${currentTime.toLocaleString()} | Auto-refresh: Every 5 minutes`
                     )
                 );
             };
