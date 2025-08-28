@@ -1,122 +1,51 @@
-<script>
-const { useState, useEffect } = React;
-
-const Dashboard = () => {
-  const [currentTime, setCurrentTime] = useState(new Date());
-  const [employees, setEmployees] = useState([]);
-  const [storeInfo, setStoreInfo] = useState({});
-  const [loading, setLoading] = useState(true);
-  const [currentView, setCurrentView] = useState('store');
-  const [currentStore, setCurrentStore] = useState('609');
-
-  // Get URL parameters
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const store = urlParams.get('store');
-    const franchise = urlParams.get('franchise');
-    
-    if (franchise === 'true') {
-      setCurrentView('franchise');
-    } else if (store) {
-      setCurrentView('store');
-      setCurrentStore(store);
-    }
-    
-    // Load data after getting URL params
-    setTimeout(() => {
-      if (currentView === 'store') {
-        loadStoreData(currentStore);
-      } else {
-        loadFranchiseData();
-      }
-    }, 1000);
-  }, []);
-
-  useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const loadStoreData = (storeNumber) => {
-    setStoreInfo({
-      storeNumber: storeNumber,
-      districtManager: "Benjamin Braasch DM",
-      totalEmployees: 20,
-      dashboardScore: 95
-    });
-
-    const sampleData = {
-      '609': [
-        { name: "MORALES, ANDY", position: "Service Tech", daysUntilExpiry: -1, status: "critical" },
-        { name: "AVALOS, RAMON", position: "Technician", daysUntilExpiry: 180, status: "good" }
-      ],
-      '1002': [
-        { name: "CUGUA, MYNOR", position: "Technician", daysUntilExpiry: 42, status: "warning" }
-      ]
-    };
-
-    setEmployees(sampleData[storeNumber] || []);
-    setLoading(false);
-  };
-
-  const loadFranchiseData = () => {
-    setStoreInfo({
-      totalStores: 8,
-      totalEmployees: 160,
-      overallCompliance: 94
-    });
-    setEmployees([]);
-    setLoading(false);
-  };
-
-  const criticalEmployees = employees.filter(emp => emp.status === 'critical' || emp.status === 'missing');
-
-  if (loading) {
-    return React.createElement('div', {
-      className: 'min-h-screen bg-gradient-to-br from-red-900 via-red-800 to-red-900 text-white flex items-center justify-center'
-    }, 
-      React.createElement('div', { className: 'text-center' },
-        React.createElement('div', { className: 'text-3xl font-bold mb-4' }, `Loading Store ${currentStore} Dashboard...`),
-        React.createElement('div', { className: 'text-red-200' }, 'Processing certification data...')
-      )
-    );
-  }
-
-  return React.createElement('div', {
-    className: 'min-h-screen bg-gradient-to-br from-red-900 via-red-800 to-red-900 text-white p-4'
-  },
-    React.createElement('div', { className: 'mb-6' },
-      React.createElement('h1', { className: 'text-3xl font-bold' }, `Store ${currentStore} Certification Dashboard`),
-      React.createElement('p', { className: 'text-red-200' }, currentTime.toLocaleString())
-    ),
-    React.createElement('div', { className: 'mb-4 flex flex-wrap gap-2' },
-      ['609', '1002', '1257', '1270', '1396', '1932', '2911', '4182'].map(store =>
-        React.createElement('a', {
-          key: store,
-          href: `?store=${store}`,
-          className: `px-3 py-1 rounded text-sm ${store === currentStore ? 'bg-white text-red-800' : 'bg-white/20 hover:bg-white/30'}`
-        }, `Store ${store}`)
-      )
-    ),
-    React.createElement('div', { className: 'bg-white/10 backdrop-blur-sm rounded-xl p-6' },
-      React.createElement('h2', { className: 'text-xl font-bold text-red-400 mb-4' }, 'CRITICAL ATTENTION REQUIRED'),
-      criticalEmployees.length > 0 ? 
-        criticalEmployees.map((employee, index) => 
-          React.createElement('div', { 
-            key: index, 
-            className: 'bg-red-500/20 rounded-lg p-3 mb-3 flex justify-between items-center'
-          },
-            React.createElement('div', null,
-              React.createElement('div', { className: 'font-semibold' }, employee.name),
-              React.createElement('div', { className: 'text-sm text-red-200' }, employee.position)
-            ),
-            React.createElement('div', { className: 'text-red-400 font-bold' }, 'EXPIRED')
-          )
-        ) :
-        React.createElement('div', { className: 'text-center text-green-300 py-8' }, 'No critical certifications!')
-    )
-  );
-};
-
-ReactDOM.render(React.createElement(Dashboard), document.getElementById('root'));
-</script>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>JLU Dashboard</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+    <div id="root"></div>
+    <script>
+        // Wait for React to load before executing
+        window.addEventListener('load', function() {
+            console.log('React loaded:', typeof React);
+            console.log('ReactDOM loaded:', typeof ReactDOM);
+            
+            if (typeof React === 'undefined') {
+                document.getElementById('root').innerHTML = '<div style="color:red;padding:20px;">React failed to load</div>';
+                return;
+            }
+            
+            const Dashboard = () => {
+                const urlParams = new URLSearchParams(window.location.search);
+                const store = urlParams.get('store') || '609';
+                
+                return React.createElement('div', {
+                    className: 'min-h-screen bg-red-900 text-white flex flex-col items-center justify-center p-8'
+                },
+                    React.createElement('h1', { className: 'text-4xl font-bold mb-4' }, `Store ${store} Dashboard`),
+                    React.createElement('p', { className: 'text-xl mb-8' }, 'JLU Certification Status'),
+                    React.createElement('div', { className: 'bg-red-700 p-4 rounded' },
+                        React.createElement('p', null, 'Dashboard is working! URL parameter detected.')
+                    ),
+                    React.createElement('div', { className: 'mt-4 space-x-2' },
+                        ['609', '1002', '1257', '1270'].map(storeNum =>
+                            React.createElement('a', {
+                                key: storeNum,
+                                href: `?store=${storeNum}`,
+                                className: 'bg-white text-red-900 px-3 py-1 rounded mr-2'
+                            }, `Store ${storeNum}`)
+                        )
+                    )
+                );
+            };
+            
+            ReactDOM.render(React.createElement(Dashboard), document.getElementById('root'));
+        });
+    </script>
+</body>
+</html>
