@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8" />
-    <title>JLU Dashboard Debug</title>
+    <title>JLU Dashboard</title>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -15,128 +15,326 @@
             const { useState, useEffect } = React;
             
             const Dashboard = () => {
-                const [debugInfo, setDebugInfo] = useState('Starting...');
-                const [fileList, setFileList] = useState([]);
+                const [currentTime, setCurrentTime] = useState(new Date());
                 const [employees, setEmployees] = useState([]);
+                const [storeInfo, setStoreInfo] = useState({});
                 const [loading, setLoading] = useState(true);
+                const [error, setError] = useState(null);
                 
                 const urlParams = new URLSearchParams(window.location.search);
                 const currentStore = urlParams.get('store') || '609';
                 
                 useEffect(() => {
-                    debugFileAccess(currentStore);
+                    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+                    return () => clearInterval(timer);
+                }, []);
+                
+                useEffect(() => {
+                    loadStoreExcelData(currentStore);
                 }, [currentStore]);
                 
-                const debugFileAccess = async (storeNumber) => {
-                    let debugLog = `Debugging Store ${storeNumber}:\n`;
+                const calculateDaysUntilExpiry = (expirationDate) => {
+                    if (!expirationDate || expirationDate === '' || expirationDate === 'N/A') return null;
                     
-                    try {
-                        // First, let's see what files are available
-                        debugLog += 'Checking available data files...\n';
-                        
-                        // Try to list files in data directory (this might not work due to CORS)
-                        try {
-                            const response = await fetch('/data/');
-                            debugLog += `Data directory response: ${response.status}\n`;
-                        } catch (e) {
-                            debugLog += `Can't list data directory: ${e.message}\n`;
-                        }
-                        
-                        // Try different possible filenames
-                        const today = new Date().toISOString().split('T')[0];
-                        const possibleFilenames = [
-                            `MDCReport_Store${storeNumber}_${today}.xlsx`,
-                            `MDCReport-${storeNumber}-${today.replace(/-/g, '-')}.xlsx`,
-                            `MDCReport-${storeNumber}-2025-08-28_02-49-27_20250828_145308.xlsx`,
-                            `MDCReport-${storeNumber}-2025-08-28_02-50-20_20250828_145309.xlsx`
-                        ];
-                        
-                        debugLog += `Trying filenames for store ${storeNumber}:\n`;
-                        let foundFile = null;
-                        
-                        for (const filename of possibleFilenames) {
-                            debugLog += `Trying: /data/${filename}\n`;
-                            
-                            try {
-                                const response = await fetch(`/data/${filename}`);
-                                debugLog += `  Response: ${response.status} ${response.statusText}\n`;
-                                
-                                if (response.ok) {
-                                    debugLog += `  ✓ Found file: ${filename}\n`;
-                                    foundFile = filename;
-                                    
-                                    // Try to read the Excel file
-                                    const arrayBuffer = await response.arrayBuffer();
-                                    debugLog += `  File size: ${arrayBuffer.byteLength} bytes\n`;
-                                    
-                                    const workbook = XLSX.read(arrayBuffer);
-                                    debugLog += `  Worksheets: ${workbook.SheetNames.join(', ')}\n`;
-                                    
-                                    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-                                    const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
-                                    debugLog += `  Data rows: ${jsonData.length}\n`;
-                                    debugLog += `  First row keys: ${Object.keys(jsonData[0] || {}).slice(0, 5).join(', ')}\n`;
-                                    
-                                    // Show first few rows of data
-                                    if (jsonData.length > 0) {
-                                        debugLog += `  Sample data:\n`;
-                                        jsonData.slice(0, 3).forEach((row, i) => {
-                                            debugLog += `    Row ${i}: ${JSON.stringify(row).substring(0, 100)}...\n`;
-                                        });
-                                    }
-                                    
-                                    break;
-                                } else {
-                                    debugLog += `  ✗ Not found\n`;
-                                }
-                            } catch (e) {
-                                debugLog += `  ✗ Error: ${e.message}\n`;
-                            }
-                        }
-                        
-                        if (!foundFile) {
-                            debugLog += `No files found for store ${storeNumber}\n`;
-                            debugLog += `Current date used: ${today}\n`;
-                            debugLog += `Check that files exist in /data/ folder\n`;
-                        }
-                        
-                    } catch (error) {
-                        debugLog += `Overall error: ${error.message}\n`;
+                    let dateStr = expirationDate;
+                    if (typeof dateStr === 'string' && dateStr.includes(' 00:00:00')) {
+                        dateStr = dateStr.replace(' 00:00:00', '');
                     }
                     
-                    setDebugInfo(debugLog);
-                    setLoading(false);
+                    const expDate = new Date(dateStr);
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    expDate.setHours(0, 0, 0, 0);
+                    
+                    if (isNaN(expDate.getTime())) return null;
+                    
+                    const diffTime = expDate - today;
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    return diffDays;
                 };
+                
+                const loadStoreExcelData = async (storeNumber) => {
+                    try {
+                        setLoading(true);
+                        setError(null);
+                        
+                        const today = new Date().toISOString().split('T')[0];
+                        const filename = `MDCReport_Store${storeNumber}_${today}.xlsx`;
+                        
+                        const response = await fetch(`/data/${filename}`);
+                        if (!response.ok) {
+                            throw new Error(`Could not load ${filename}: ${response.status}`);
+                        }
+                        
+                        const arrayBuffer = await response.arrayBuffer();
+                        const workbook = XLSX.read(arrayBuffer);
+                        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                        const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+                        
+                        // Process employees based on debug info structure
+                        const processedEmployees = [];
+                        
+                        if (jsonData.length > 2) {
+                            // Row 0: Employee names and hire dates (like "CABANAS, PATRICIO":"1000208257 - 02/07/2025")
+                            // Row 1: Headers (Status, Completion Date, Expiration Date)
+                            // Row 2+: Certification data
+                            
+                            const employeeRow = jsonData[0] || {};
+                            const headerRow = jsonData[1] || {};
+                            
+                            // Get employee columns (those with actual names)
+                            const employeeColumns = Object.keys(employeeRow).filter(key => {
+                                const value = employeeRow[key];
+                                return value && 
+                                       typeof value === 'string' && 
+                                       value.includes(' - ') && 
+                                       key !== '__EMPTY' && 
+                                       !key.includes('__EMPTY');
+                            });
+                            
+                            console.log('Processing employees:', employeeColumns);
+                            
+                            employeeColumns.forEach(employeeCol => {
+                                const employeeName = employeeCol;
+                                const certifications = [];
+                                
+                                // Find this employee's column positions
+                                const employeeColIndex = Object.keys(employeeRow).indexOf(employeeCol);
+                                
+                                // Process certification rows (starting from row 2)
+                                for (let rowIndex = 2; rowIndex < jsonData.length; rowIndex++) {
+                                    const row = jsonData[rowIndex];
+                                    const certName = row['__EMPTY']; // Certification name is in first column
+                                    
+                                    if (!certName) continue;
+                                    
+                                    // Get the columns for this employee (status, completion, expiration)
+                                    const columnKeys = Object.keys(row);
+                                    const statusCol = columnKeys[employeeColIndex];
+                                    const completionCol = columnKeys[employeeColIndex + 1];
+                                    const expirationCol = columnKeys[employeeColIndex + 2];
+                                    
+                                    const status = row[statusCol];
+                                    const completionDate = row[completionCol];
+                                    const expirationDate = row[expirationCol];
+                                    
+                                    // Only include if they have completed this certification
+                                    if (status === 'C' || completionDate) {
+                                        const daysUntilExpiry = calculateDaysUntilExpiry(expirationDate);
+                                        
+                                        certifications.push({
+                                            name: certName,
+                                            status: status,
+                                            completionDate: completionDate,
+                                            expirationDate: expirationDate,
+                                            daysUntilExpiry: daysUntilExpiry
+                                        });
+                                    }
+                                }
+                                
+                                if (certifications.length > 0) {
+                                    // Determine overall employee status
+                                    let minDaysToExpiry = Infinity;
+                                    let hasCritical = false;
+                                    let hasWarning = false;
+                                    
+                                    certifications.forEach(cert => {
+                                        if (cert.daysUntilExpiry !== null) {
+                                            if (cert.daysUntilExpiry <= 0) {
+                                                hasCritical = true;
+                                            } else if (cert.daysUntilExpiry <= 30) {
+                                                hasCritical = true;
+                                            } else if (cert.daysUntilExpiry <= 60) {
+                                                hasWarning = true;
+                                            }
+                                            minDaysToExpiry = Math.min(minDaysToExpiry, cert.daysUntilExpiry);
+                                        }
+                                    });
+                                    
+                                    let overallStatus = 'good';
+                                    if (hasCritical) {
+                                        overallStatus = 'critical';
+                                    } else if (hasWarning) {
+                                        overallStatus = 'warning';
+                                    }
+                                    
+                                    processedEmployees.push({
+                                        name: employeeName,
+                                        position: "Team Member",
+                                        certifications: certifications,
+                                        daysUntilExpiry: minDaysToExpiry === Infinity ? null : minDaysToExpiry,
+                                        status: overallStatus
+                                    });
+                                }
+                            });
+                        }
+                        
+                        console.log(`Processed ${processedEmployees.length} employees for store ${storeNumber}`);
+                        
+                        setEmployees(processedEmployees);
+                        setStoreInfo({
+                            storeNumber: storeNumber,
+                            districtManager: "Benjamin Braasch DM",
+                            totalEmployees: processedEmployees.length,
+                            dashboardScore: 95
+                        });
+                        
+                    } catch (err) {
+                        console.error('Error loading Excel data:', err);
+                        setError(`Failed to load data: ${err.message}`);
+                    } finally {
+                        setLoading(false);
+                    }
+                };
+                
+                const criticalEmployees = employees.filter(emp => emp.status === 'critical');
+                const warningEmployees = employees.filter(emp => emp.status === 'warning'); 
+                const goodEmployees = employees.filter(emp => emp.status === 'good');
                 
                 if (loading) {
                     return React.createElement('div', {
-                        className: 'min-h-screen bg-red-900 text-white p-4'
+                        className: 'min-h-screen bg-gradient-to-br from-red-900 via-red-800 to-red-900 text-white flex items-center justify-center'
                     },
-                        React.createElement('div', { className: 'max-w-4xl mx-auto' },
-                            React.createElement('h1', { className: 'text-2xl font-bold mb-4' }, `Debug Mode - Store ${currentStore}`),
-                            React.createElement('div', { className: 'text-sm' }, 'Loading and checking files...')
+                        React.createElement('div', { className: 'text-center' },
+                            React.createElement('div', { className: 'text-3xl font-bold mb-4' }, `Loading Store ${currentStore}...`),
+                            React.createElement('div', { className: 'text-red-200' }, 'Processing certification data...')
+                        )
+                    );
+                }
+                
+                if (error) {
+                    return React.createElement('div', {
+                        className: 'min-h-screen bg-red-900 text-white flex items-center justify-center'
+                    },
+                        React.createElement('div', { className: 'text-center' },
+                            React.createElement('div', { className: 'text-2xl font-bold mb-4' }, 'Error Loading Data'),
+                            React.createElement('div', { className: 'mb-4' }, error),
+                            React.createElement('button', {
+                                className: 'bg-white text-red-800 px-4 py-2 rounded',
+                                onClick: () => window.location.reload()
+                            }, 'Retry')
                         )
                     );
                 }
                 
                 return React.createElement('div', {
-                    className: 'min-h-screen bg-red-900 text-white p-4'
+                    className: 'min-h-screen bg-gradient-to-br from-red-900 via-red-800 to-red-900 text-white p-4'
                 },
-                    React.createElement('div', { className: 'max-w-4xl mx-auto' },
-                        React.createElement('h1', { className: 'text-2xl font-bold mb-4' }, `Debug Information - Store ${currentStore}`),
-                        React.createElement('div', { className: 'mb-4' },
-                            ['609', '1002', '1257', '1270'].map(store =>
-                                React.createElement('a', {
-                                    key: store,
-                                    href: `?store=${store}`,
-                                    className: `mr-2 px-3 py-1 rounded ${store === currentStore ? 'bg-white text-red-800' : 'bg-red-700'}`
-                                }, `Store ${store}`)
+                    // Header
+                    React.createElement('div', { className: 'mb-6' },
+                        React.createElement('div', { className: 'flex items-center justify-between' },
+                            React.createElement('div', { className: 'flex items-center space-x-4' },
+                                React.createElement('div', { className: 'bg-white rounded-lg p-3' },
+                                    React.createElement('div', { className: 'text-red-800 font-bold text-lg' }, 'JLU')
+                                ),
+                                React.createElement('div', null,
+                                    React.createElement('h1', { className: 'text-3xl font-bold' }, `Store ${currentStore} Certification Dashboard`),
+                                    React.createElement('p', { className: 'text-red-200' }, `DM: ${storeInfo.districtManager}`)
+                                )
+                            ),
+                            React.createElement('div', { className: 'text-right' },
+                                React.createElement('div', { className: 'text-xl font-mono' }, currentTime.toLocaleTimeString()),
+                                React.createElement('div', { className: 'text-red-200' }, currentTime.toLocaleDateString())
+                            )
+                        )
+                    ),
+                    
+                    // Store navigation
+                    React.createElement('div', { className: 'mb-6 flex flex-wrap gap-2' },
+                        ['609', '1002', '1257', '1270', '1396', '1932', '2911', '4182'].map(store =>
+                            React.createElement('a', {
+                                key: store,
+                                href: `?store=${store}`,
+                                className: `px-3 py-1 rounded text-sm ${store === currentStore ? 'bg-white text-red-800' : 'bg-white/20 hover:bg-white/30'}`
+                            }, `Store ${store}`)
+                        )
+                    ),
+                    
+                    // Metrics
+                    React.createElement('div', { className: 'grid grid-cols-4 gap-4 mb-6' },
+                        React.createElement('div', { className: 'bg-white/10 backdrop-blur-sm rounded-xl p-4' },
+                            React.createElement('div', { className: 'text-2xl font-bold' }, storeInfo.totalEmployees),
+                            React.createElement('div', { className: 'text-sm text-white/70' }, 'Total Employees')
+                        ),
+                        React.createElement('div', { className: 'bg-white/10 backdrop-blur-sm rounded-xl p-4' },
+                            React.createElement('div', { className: 'text-2xl font-bold text-red-400' }, criticalEmployees.length),
+                            React.createElement('div', { className: 'text-sm text-white/70' }, 'Critical/Missing')
+                        ),
+                        React.createElement('div', { className: 'bg-white/10 backdrop-blur-sm rounded-xl p-4' },
+                            React.createElement('div', { className: 'text-2xl font-bold text-yellow-400' }, warningEmployees.length),
+                            React.createElement('div', { className: 'text-sm text-white/70' }, 'Expiring Soon')
+                        ),
+                        React.createElement('div', { className: 'bg-white/10 backdrop-blur-sm rounded-xl p-4' },
+                            React.createElement('div', { className: 'text-2xl font-bold text-green-400' }, goodEmployees.length),
+                            React.createElement('div', { className: 'text-sm text-white/70' }, 'Current & Good')
+                        )
+                    ),
+                    
+                    // Employee details
+                    React.createElement('div', { className: 'grid grid-cols-2 gap-6' },
+                        // Critical section
+                        React.createElement('div', { className: 'bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-red-300/50' },
+                            React.createElement('h2', { className: 'text-xl font-bold text-red-400 mb-4' }, 'CRITICAL ATTENTION REQUIRED'),
+                            React.createElement('div', { className: 'space-y-3 max-h-64 overflow-y-auto' },
+                                criticalEmployees.length > 0 ? 
+                                    criticalEmployees.map((employee, index) => 
+                                        React.createElement('div', { 
+                                            key: index, 
+                                            className: 'bg-red-500/20 rounded-lg p-3 border border-red-400/30'
+                                        },
+                                            React.createElement('div', { className: 'flex justify-between items-center' },
+                                                React.createElement('div', null,
+                                                    React.createElement('div', { className: 'font-semibold' }, employee.name),
+                                                    React.createElement('div', { className: 'text-sm text-red-200' }, `${employee.certifications.length} certifications`)
+                                                ),
+                                                React.createElement('div', { className: 'text-right' },
+                                                    React.createElement('div', { className: 'text-red-400 font-bold' }, 
+                                                        employee.daysUntilExpiry <= 0 ? 'EXPIRED' : 
+                                                        employee.daysUntilExpiry <= 30 ? `${employee.daysUntilExpiry} DAYS` : 'CRITICAL'
+                                                    )
+                                                )
+                                            )
+                                        )
+                                    ) :
+                                    React.createElement('div', { className: 'text-center text-green-300 py-8' },
+                                        React.createElement('div', { className: 'text-2xl mb-2' }, '✅'),
+                                        React.createElement('div', null, 'No critical certifications!')
+                                    )
                             )
                         ),
-                        React.createElement('pre', { 
-                            className: 'bg-black p-4 rounded text-sm text-green-400 overflow-auto max-h-96',
-                            style: { fontFamily: 'monospace' }
-                        }, debugInfo)
+                        
+                        // Warning section  
+                        React.createElement('div', { className: 'bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-yellow-300/50' },
+                            React.createElement('h2', { className: 'text-xl font-bold text-yellow-400 mb-4' }, 'EXPIRING SOON (30-60 Days)'),
+                            React.createElement('div', { className: 'space-y-3 max-h-64 overflow-y-auto' },
+                                warningEmployees.length > 0 ? 
+                                    warningEmployees.map((employee, index) => 
+                                        React.createElement('div', { 
+                                            key: index, 
+                                            className: 'bg-yellow-500/20 rounded-lg p-3 border border-yellow-400/30'
+                                        },
+                                            React.createElement('div', { className: 'flex justify-between items-center' },
+                                                React.createElement('div', null,
+                                                    React.createElement('div', { className: 'font-semibold' }, employee.name),
+                                                    React.createElement('div', { className: 'text-sm text-yellow-200' }, `${employee.certifications.length} certifications`)
+                                                ),
+                                                React.createElement('div', { className: 'text-right' },
+                                                    React.createElement('div', { className: 'text-yellow-400 font-bold' }, `${employee.daysUntilExpiry} DAYS`)
+                                                )
+                                            )
+                                        )
+                                    ) :
+                                    React.createElement('div', { className: 'text-center text-green-300 py-8' },
+                                        React.createElement('div', { className: 'text-2xl mb-2' }, '✅'),
+                                        React.createElement('div', null, 'No upcoming expirations!')
+                                    )
+                            )
+                        )
+                    ),
+                    
+                    // Footer
+                    React.createElement('div', { className: 'mt-6 text-center text-white/60 text-sm' },
+                        `Last Updated: ${currentTime.toLocaleString()} | Processing ${employees.length} employees`
                     )
                 );
             };
