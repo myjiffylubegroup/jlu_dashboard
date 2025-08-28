@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8" />
-    <title>JLU Dashboard</title>
+    <title>JLU Dashboard Debug</title>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -15,302 +15,128 @@
             const { useState, useEffect } = React;
             
             const Dashboard = () => {
-                const [currentTime, setCurrentTime] = useState(new Date());
+                const [debugInfo, setDebugInfo] = useState('Starting...');
+                const [fileList, setFileList] = useState([]);
                 const [employees, setEmployees] = useState([]);
-                const [storeInfo, setStoreInfo] = useState({});
                 const [loading, setLoading] = useState(true);
-                const [error, setError] = useState(null);
                 
                 const urlParams = new URLSearchParams(window.location.search);
                 const currentStore = urlParams.get('store') || '609';
-                const franchiseView = urlParams.get('franchise') === 'true';
                 
-                // Update time every second
                 useEffect(() => {
-                    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-                    return () => clearInterval(timer);
-                }, []);
+                    debugFileAccess(currentStore);
+                }, [currentStore]);
                 
-                // Load Excel data when component mounts
-                useEffect(() => {
-                    if (!franchiseView) {
-                        loadStoreExcelData(currentStore);
-                    } else {
-                        loadFranchiseExcelData();
-                    }
-                }, [currentStore, franchiseView]);
-                
-                const calculateDaysUntilExpiry = (expirationDate) => {
-                    if (!expirationDate || expirationDate === '' || expirationDate === 'N/A') return null;
+                const debugFileAccess = async (storeNumber) => {
+                    let debugLog = `Debugging Store ${storeNumber}:\n`;
                     
-                    let dateStr = expirationDate;
-                    if (typeof dateStr === 'string' && dateStr.includes(' 00:00:00')) {
-                        dateStr = dateStr.replace(' 00:00:00', '');
-                    }
-                    
-                    const expDate = new Date(dateStr);
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0);
-                    expDate.setHours(0, 0, 0, 0);
-                    
-                    const diffTime = expDate - today;
-                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                    return diffDays;
-                };
-                
-                const getEmployeeStatus = (certifications) => {
-                    let minDaysToExpiry = Infinity;
-                    let hasMissing = false;
-                    let hasExpired = false;
-                    
-                    certifications.forEach(cert => {
-                        if (!cert.expirationDate || cert.expirationDate === '') {
-                            hasMissing = true;
-                        } else {
-                            const daysUntilExpiry = calculateDaysUntilExpiry(cert.expirationDate);
-                            if (daysUntilExpiry <= 0) {
-                                hasExpired = true;
-                            }
-                            if (daysUntilExpiry < minDaysToExpiry) {
-                                minDaysToExpiry = daysUntilExpiry;
-                            }
-                        }
-                    });
-                    
-                    if (hasMissing || hasExpired) return { status: 'critical', daysUntilExpiry: minDaysToExpiry };
-                    if (minDaysToExpiry <= 30) return { status: 'critical', daysUntilExpiry: minDaysToExpiry };
-                    if (minDaysToExpiry <= 60) return { status: 'warning', daysUntilExpiry: minDaysToExpiry };
-                    return { status: 'good', daysUntilExpiry: minDaysToExpiry };
-                };
-                
-                const loadStoreExcelData = async (storeNumber) => {
                     try {
-                        setLoading(true);
-                        setError(null);
+                        // First, let's see what files are available
+                        debugLog += 'Checking available data files...\n';
                         
-                        // Find the MDC Report file for this store
-                        const today = new Date().toISOString().split('T')[0];
-                        const filename = `MDCReport_Store${storeNumber}_${today}.xlsx`;
-                        const fileUrl = `/data/${filename}`;
-                        
-                        console.log(`Loading Excel file: ${fileUrl}`);
-                        
-                        const response = await fetch(fileUrl);
-                        if (!response.ok) {
-                            throw new Error(`Could not load ${filename}: ${response.status}`);
+                        // Try to list files in data directory (this might not work due to CORS)
+                        try {
+                            const response = await fetch('/data/');
+                            debugLog += `Data directory response: ${response.status}\n`;
+                        } catch (e) {
+                            debugLog += `Can't list data directory: ${e.message}\n`;
                         }
                         
-                        const arrayBuffer = await response.arrayBuffer();
-                        const workbook = XLSX.read(arrayBuffer);
-                        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-                        const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+                        // Try different possible filenames
+                        const today = new Date().toISOString().split('T')[0];
+                        const possibleFilenames = [
+                            `MDCReport_Store${storeNumber}_${today}.xlsx`,
+                            `MDCReport-${storeNumber}-${today.replace(/-/g, '-')}.xlsx`,
+                            `MDCReport-${storeNumber}-2025-08-28_02-49-27_20250828_145308.xlsx`,
+                            `MDCReport-${storeNumber}-2025-08-28_02-50-20_20250828_145309.xlsx`
+                        ];
                         
-                        console.log('Raw Excel data:', jsonData.slice(0, 5));
+                        debugLog += `Trying filenames for store ${storeNumber}:\n`;
+                        let foundFile = null;
                         
-                        // Process the MDC report structure
-                        const processedEmployees = [];
-                        
-                        if (jsonData.length > 2) {
-                            // Get employee columns (skip first empty column)
-                            const headerRow = jsonData[1] || {};
-                            const employeeColumns = Object.keys(headerRow).filter(key => 
-                                key !== '__EMPTY' && 
-                                !key.includes('__EMPTY') && 
-                                headerRow[key] && 
-                                headerRow[key] !== 'Status' &&
-                                headerRow[key] !== 'Completion Date' &&
-                                headerRow[key] !== 'Expiration Date'
-                            );
+                        for (const filename of possibleFilenames) {
+                            debugLog += `Trying: /data/${filename}\n`;
                             
-                            console.log('Found employee columns:', employeeColumns);
-                            
-                            employeeColumns.forEach(employeeCol => {
-                                const employeeName = employeeCol;
-                                const certifications = [];
+                            try {
+                                const response = await fetch(`/data/${filename}`);
+                                debugLog += `  Response: ${response.status} ${response.statusText}\n`;
                                 
-                                // Process each certification row
-                                jsonData.forEach((row, rowIndex) => {
-                                    if (rowIndex <= 1) return; // Skip header rows
+                                if (response.ok) {
+                                    debugLog += `  ✓ Found file: ${filename}\n`;
+                                    foundFile = filename;
                                     
-                                    const certName = row['__EMPTY'];
-                                    if (!certName) return;
+                                    // Try to read the Excel file
+                                    const arrayBuffer = await response.arrayBuffer();
+                                    debugLog += `  File size: ${arrayBuffer.byteLength} bytes\n`;
                                     
-                                    const employeeIndex = Object.keys(row).indexOf(employeeCol);
-                                    const statusCol = Object.keys(row)[employeeIndex];
-                                    const completionCol = Object.keys(row)[employeeIndex + 1];
-                                    const expirationCol = Object.keys(row)[employeeIndex + 2];
+                                    const workbook = XLSX.read(arrayBuffer);
+                                    debugLog += `  Worksheets: ${workbook.SheetNames.join(', ')}\n`;
                                     
-                                    const status = row[statusCol];
-                                    const completionDate = row[completionCol];
-                                    const expirationDate = row[expirationCol];
+                                    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                                    const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+                                    debugLog += `  Data rows: ${jsonData.length}\n`;
+                                    debugLog += `  First row keys: ${Object.keys(jsonData[0] || {}).slice(0, 5).join(', ')}\n`;
                                     
-                                    if (status === 'C' || completionDate) {
-                                        certifications.push({
-                                            name: certName,
-                                            status: status,
-                                            completionDate: completionDate,
-                                            expirationDate: expirationDate
+                                    // Show first few rows of data
+                                    if (jsonData.length > 0) {
+                                        debugLog += `  Sample data:\n`;
+                                        jsonData.slice(0, 3).forEach((row, i) => {
+                                            debugLog += `    Row ${i}: ${JSON.stringify(row).substring(0, 100)}...\n`;
                                         });
                                     }
-                                });
-                                
-                                if (certifications.length > 0) {
-                                    const employeeStatus = getEmployeeStatus(certifications);
                                     
-                                    processedEmployees.push({
-                                        name: employeeName,
-                                        position: "Team Member", // Default since position data isn't in MDC
-                                        certifications: certifications,
-                                        daysUntilExpiry: employeeStatus.daysUntilExpiry,
-                                        status: employeeStatus.status
-                                    });
+                                    break;
+                                } else {
+                                    debugLog += `  ✗ Not found\n`;
                                 }
-                            });
+                            } catch (e) {
+                                debugLog += `  ✗ Error: ${e.message}\n`;
+                            }
                         }
                         
-                        console.log('Processed employees:', processedEmployees);
+                        if (!foundFile) {
+                            debugLog += `No files found for store ${storeNumber}\n`;
+                            debugLog += `Current date used: ${today}\n`;
+                            debugLog += `Check that files exist in /data/ folder\n`;
+                        }
                         
-                        setEmployees(processedEmployees);
-                        setStoreInfo({
-                            storeNumber: storeNumber,
-                            districtManager: "Benjamin Braasch DM",
-                            totalEmployees: processedEmployees.length,
-                            dashboardScore: 95
-                        });
-                        
-                    } catch (err) {
-                        console.error('Error loading Excel data:', err);
-                        setError(`Failed to load data for Store ${storeNumber}: ${err.message}`);
-                        
-                        // Fallback to sample data for testing
-                        setEmployees([
-                            { name: "Sample Employee", position: "Team Member", daysUntilExpiry: 25, status: "warning" }
-                        ]);
-                        setStoreInfo({
-                            storeNumber: storeNumber,
-                            districtManager: "Benjamin Braasch DM", 
-                            totalEmployees: 1,
-                            dashboardScore: 95
-                        });
-                    } finally {
-                        setLoading(false);
+                    } catch (error) {
+                        debugLog += `Overall error: ${error.message}\n`;
                     }
+                    
+                    setDebugInfo(debugLog);
+                    setLoading(false);
                 };
-                
-                const loadFranchiseExcelData = async () => {
-                    try {
-                        setLoading(true);
-                        // Load franchise data from CertPercent file
-                        const today = new Date().toISOString().split('T')[0];
-                        const filename = `FranchiseDashboard_${today}.xlsx`;
-                        
-                        // For now, use sample franchise data
-                        setStoreInfo({
-                            totalStores: 8,
-                            totalEmployees: 160,
-                            overallCompliance: 94
-                        });
-                        setEmployees([]);
-                    } catch (err) {
-                        console.error('Error loading franchise data:', err);
-                        setError(`Failed to load franchise data: ${err.message}`);
-                    } finally {
-                        setLoading(false);
-                    }
-                };
-                
-                const criticalEmployees = employees.filter(emp => emp.status === 'critical');
-                const warningEmployees = employees.filter(emp => emp.status === 'warning'); 
-                const goodEmployees = employees.filter(emp => emp.status === 'good');
                 
                 if (loading) {
                     return React.createElement('div', {
-                        className: 'min-h-screen bg-gradient-to-br from-red-900 via-red-800 to-red-900 text-white flex items-center justify-center'
+                        className: 'min-h-screen bg-red-900 text-white p-4'
                     },
-                        React.createElement('div', { className: 'text-center' },
-                            React.createElement('div', { className: 'text-3xl font-bold mb-4' }, 
-                                franchiseView ? 'Loading Franchise Dashboard...' : `Loading Store ${currentStore} Data...`
-                            ),
-                            React.createElement('div', { className: 'text-red-200' }, 'Reading Excel certification files...')
+                        React.createElement('div', { className: 'max-w-4xl mx-auto' },
+                            React.createElement('h1', { className: 'text-2xl font-bold mb-4' }, `Debug Mode - Store ${currentStore}`),
+                            React.createElement('div', { className: 'text-sm' }, 'Loading and checking files...')
                         )
                     );
                 }
                 
-                if (error) {
-                    return React.createElement('div', {
-                        className: 'min-h-screen bg-gradient-to-br from-red-900 via-red-800 to-red-900 text-white flex items-center justify-center'
-                    },
-                        React.createElement('div', { className: 'text-center max-w-lg' },
-                            React.createElement('div', { className: 'text-3xl font-bold mb-4 text-red-400' }, 'Data Loading Error'),
-                            React.createElement('div', { className: 'text-red-200 mb-6' }, error),
-                            React.createElement('button', {
-                                className: 'bg-white text-red-800 px-6 py-2 rounded font-bold',
-                                onClick: () => window.location.reload()
-                            }, 'Retry')
-                        )
-                    );
-                }
-                
-                // Rest of dashboard rendering code stays the same as previous version...
                 return React.createElement('div', {
-                    className: 'min-h-screen bg-gradient-to-br from-red-900 via-red-800 to-red-900 text-white p-4'
+                    className: 'min-h-screen bg-red-900 text-white p-4'
                 },
-                    // Header with current store
-                    React.createElement('div', { className: 'mb-6' },
-                        React.createElement('h1', { className: 'text-3xl font-bold mb-2' }, `Store ${currentStore} Certification Dashboard`),
-                        React.createElement('p', { className: 'text-red-200' }, `${storeInfo.totalEmployees} employees • Last updated: ${currentTime.toLocaleString()}`)
-                    ),
-                    
-                    // Store navigation
-                    React.createElement('div', { className: 'mb-6 flex flex-wrap gap-2' },
-                        ['609', '1002', '1257', '1270', '1396', '1932', '2911', '4182'].map(store =>
-                            React.createElement('a', {
-                                key: store,
-                                href: `?store=${store}`,
-                                className: `px-3 py-1 rounded text-sm ${store === currentStore ? 'bg-white text-red-800' : 'bg-white/20 hover:bg-white/30'}`
-                            }, `Store ${store}`)
-                        )
-                    ),
-                    
-                    // Metrics
-                    React.createElement('div', { className: 'grid grid-cols-4 gap-4 mb-6' },
-                        React.createElement('div', { className: 'bg-white/10 rounded-xl p-4' },
-                            React.createElement('div', { className: 'text-2xl font-bold' }, storeInfo.totalEmployees),
-                            React.createElement('div', { className: 'text-sm text-white/70' }, 'Total Employees')
+                    React.createElement('div', { className: 'max-w-4xl mx-auto' },
+                        React.createElement('h1', { className: 'text-2xl font-bold mb-4' }, `Debug Information - Store ${currentStore}`),
+                        React.createElement('div', { className: 'mb-4' },
+                            ['609', '1002', '1257', '1270'].map(store =>
+                                React.createElement('a', {
+                                    key: store,
+                                    href: `?store=${store}`,
+                                    className: `mr-2 px-3 py-1 rounded ${store === currentStore ? 'bg-white text-red-800' : 'bg-red-700'}`
+                                }, `Store ${store}`)
+                            )
                         ),
-                        React.createElement('div', { className: 'bg-white/10 rounded-xl p-4' },
-                            React.createElement('div', { className: 'text-2xl font-bold text-red-400' }, criticalEmployees.length),
-                            React.createElement('div', { className: 'text-sm text-white/70' }, 'Critical/Missing')
-                        ),
-                        React.createElement('div', { className: 'bg-white/10 rounded-xl p-4' },
-                            React.createElement('div', { className: 'text-2xl font-bold text-yellow-400' }, warningEmployees.length),
-                            React.createElement('div', { className: 'text-sm text-white/70' }, 'Expiring Soon')
-                        ),
-                        React.createElement('div', { className: 'bg-white/10 rounded-xl p-4' },
-                            React.createElement('div', { className: 'text-2xl font-bold text-green-400' }, goodEmployees.length),
-                            React.createElement('div', { className: 'text-sm text-white/70' }, 'Current & Good')
-                        )
-                    ),
-                    
-                    // Critical employees section
-                    React.createElement('div', { className: 'bg-white/10 rounded-xl p-6' },
-                        React.createElement('h2', { className: 'text-xl font-bold text-red-400 mb-4' }, 'CRITICAL ATTENTION REQUIRED'),
-                        criticalEmployees.length > 0 ? 
-                            criticalEmployees.map((employee, index) => 
-                                React.createElement('div', { 
-                                    key: index, 
-                                    className: 'bg-red-500/20 rounded p-3 mb-2 flex justify-between'
-                                },
-                                    React.createElement('div', null,
-                                        React.createElement('div', { className: 'font-semibold' }, employee.name),
-                                        React.createElement('div', { className: 'text-sm text-red-200' }, `${employee.certifications.length} certifications`)
-                                    ),
-                                    React.createElement('div', { className: 'text-red-400 font-bold' }, 
-                                        employee.daysUntilExpiry <= 0 ? 'EXPIRED' : `${employee.daysUntilExpiry} DAYS`
-                                    )
-                                )
-                            ) :
-                            React.createElement('div', { className: 'text-center text-green-300 py-8' }, 'No critical certifications!')
+                        React.createElement('pre', { 
+                            className: 'bg-black p-4 rounded text-sm text-green-400 overflow-auto max-h-96',
+                            style: { fontFamily: 'monospace' }
+                        }, debugInfo)
                     )
                 );
             };
