@@ -342,15 +342,74 @@
 
                 const goodEmployees = employees.filter(emp => emp.status === 'good');
                 
-                // Collect all certification issues across all employees - FIXED VERSION
+                // Collect and group certification issues by employee and category
+                const groupedIssues = new Map();
+                
+                employees.forEach(emp => {
+                    // Get display name (First name + Last initial)
+                    let displayName = emp.name;
+                    const nameParts = emp.name.split(', ');
+                    if (nameParts.length === 2) {
+                        const lastName = nameParts[0];
+                        const firstName = nameParts[1];
+                        displayName = firstName + ' ' + lastName.charAt(0) + '.';
+                    }
+                    
+                    // Combine all issues for this employee
+                    const allEmployeeIssues = [
+                        ...(emp.expiredItems || []),
+                        ...(emp.criticalItems || []),
+                        ...(emp.warningItems || [])
+                    ];
+                    
+                    // Group by category for this employee
+                    const categoryGroups = new Map();
+                    
+                    allEmployeeIssues.forEach(issue => {
+                        const key = displayName + '|' + issue.category;
+                        
+                        if (!categoryGroups.has(key)) {
+                            categoryGroups.set(key, {
+                                employeeName: displayName,
+                                category: issue.category,
+                                status: issue.status,
+                                daysUntilExpiry: issue.daysUntilExpiry,
+                                daysPastDue: issue.daysPastDue,
+                                moduleCount: 1
+                            });
+                        } else {
+                            const existing = categoryGroups.get(key);
+                            existing.moduleCount++;
+                            
+                            // Keep the worst status (expired > critical > warning)
+                            if (issue.status === 'expired' || 
+                                (existing.status !== 'expired' && issue.status === 'critical')) {
+                                existing.status = issue.status;
+                                existing.daysUntilExpiry = issue.daysUntilExpiry;
+                                existing.daysPastDue = issue.daysPastDue;
+                            }
+                        }
+                    });
+                    
+                    // Add grouped items to main collection
+                    categoryGroups.forEach(groupedItem => {
+                        groupedIssues.set(groupedItem.employeeName + '|' + groupedItem.category, groupedItem);
+                    });
+                });
+                
+                // Separate into the three arrays for display
                 const allExpiredItems = [];
                 const allCriticalItems = [];
                 const allWarningItems = [];
                 
-                employees.forEach(emp => {
-                    if (emp.expiredItems) allExpiredItems.push(...emp.expiredItems);
-                    if (emp.criticalItems) allCriticalItems.push(...emp.criticalItems);
-                    if (emp.warningItems) allWarningItems.push(...emp.warningItems);
+                groupedIssues.forEach(item => {
+                    if (item.status === 'expired') {
+                        allExpiredItems.push(item);
+                    } else if (item.status === 'critical') {
+                        allCriticalItems.push(item);
+                    } else if (item.status === 'warning') {
+                        allWarningItems.push(item);
+                    }
                 });
                 
                 const quarterData = getQuarterEndDate();
@@ -432,7 +491,10 @@
                                                     },
                                                         React.createElement('div', { className: 'font-bold text-red-800' }, item.employeeName),
                                                         React.createElement('div', { className: 'text-red-700' }, item.category),
-                                                        React.createElement('div', { className: 'text-red-600 font-semibold text-sm' }, 'EXPIRED ' + item.daysPastDue + ' days ago')
+                                                        React.createElement('div', { className: 'text-red-600 font-semibold text-sm' }, 
+                                                            'EXPIRED' + (item.daysPastDue ? ' ' + item.daysPastDue + ' days ago' : '') +
+                                                            (item.moduleCount > 1 ? ' (' + item.moduleCount + ' modules)' : '')
+                                                        )
                                                     )
                                                 )
                                             )
@@ -463,7 +525,10 @@
                                                     },
                                                         React.createElement('div', { className: 'font-bold text-orange-800' }, item.employeeName),
                                                         React.createElement('div', { className: 'text-orange-700' }, item.category),
-                                                        React.createElement('div', { className: 'text-orange-600 font-semibold text-sm' }, item.daysInfo)
+                                                        React.createElement('div', { className: 'text-orange-600 font-semibold text-sm' }, 
+                                                            item.daysUntilExpiry + ' days left' +
+                                                            (item.moduleCount > 1 ? ' (' + item.moduleCount + ' modules)' : '')
+                                                        )
                                                     )
                                                 )
                                             )
@@ -494,7 +559,10 @@
                                                     },
                                                         React.createElement('div', { className: 'font-bold text-yellow-800' }, item.employeeName),
                                                         React.createElement('div', { className: 'text-yellow-700' }, item.category),
-                                                        React.createElement('div', { className: 'text-yellow-600 font-semibold text-sm' }, item.daysInfo)
+                                                        React.createElement('div', { className: 'text-yellow-600 font-semibold text-sm' }, 
+                                                            item.daysUntilExpiry + ' days left' +
+                                                            (item.moduleCount > 1 ? ' (' + item.moduleCount + ' modules)' : '')
+                                                        )
                                                     )
                                                 )
                                             )
