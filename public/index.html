@@ -146,9 +146,7 @@
                                         totalCompleted++;
                                     }
                                     
-                                    console.log('Processing course:', courseName, 'for employee:', employee.name);
-                                    console.log('Status:', status, 'Expiration:', expirationDate);
-                                    
+                                    // Check expiration dates for ALL courses that have them, regardless of status
                                     if (expirationDate && typeof expirationDate === 'string' && expirationDate !== '') {
                                         let expDate;
                                         if (expirationDate.includes('/')) {
@@ -157,15 +155,11 @@
                                             expDate = new Date(expirationDate);
                                         }
                                         
-                                        console.log('Parsed expiration date:', expDate, 'for course:', courseName);
-                                        
                                         if (!isNaN(expDate.getTime())) {
                                             const today = new Date();
                                             today.setHours(0, 0, 0, 0);
                                             expDate.setHours(0, 0, 0, 0);
                                             const daysDiff = Math.ceil((expDate - today) / (1000 * 60 * 60 * 24));
-                                            
-                                            console.log('Days difference for', courseName, ':', daysDiff);
                                             
                                             let category = 'Other';
                                             if (courseName.includes('JTSS+ Orientation') || courseName.includes('Jiffy Lube and You') || 
@@ -202,15 +196,33 @@
                                                 category = 'California Compliance';
                                             }
                                             
+                                            // Check for expired, critical, or warning status based on expiration date
+                                            // This applies whether status is C, blank, or anything else
                                             if (daysDiff < 0) {
-                                                console.log('EXPIRED:', courseName, 'for', employee.name, '- days past due:', Math.abs(daysDiff));
-                                                certificationIssues.push({ category: category, status: 'expired', courseName: courseName, daysPastDue: Math.abs(daysDiff) });
+                                                certificationIssues.push({ 
+                                                    category: category, 
+                                                    status: 'expired', 
+                                                    courseName: courseName, 
+                                                    daysPastDue: Math.abs(daysDiff), 
+                                                    daysUntilExpiry: daysDiff,
+                                                    completionStatus: status
+                                                });
                                             } else if (daysDiff <= 30) {
-                                                console.log('CRITICAL:', courseName, 'for', employee.name, '- days until expiry:', daysDiff);
-                                                certificationIssues.push({ category: category, status: 'critical', courseName: courseName, daysUntilExpiry: daysDiff });
+                                                certificationIssues.push({ 
+                                                    category: category, 
+                                                    status: 'critical', 
+                                                    courseName: courseName, 
+                                                    daysUntilExpiry: daysDiff,
+                                                    completionStatus: status
+                                                });
                                             } else if (daysDiff <= 60) {
-                                                console.log('WARNING:', courseName, 'for', employee.name, '- days until expiry:', daysDiff);
-                                                certificationIssues.push({ category: category, status: 'warning', courseName: courseName, daysUntilExpiry: daysDiff });
+                                                certificationIssues.push({ 
+                                                    category: category, 
+                                                    status: 'warning', 
+                                                    courseName: courseName, 
+                                                    daysUntilExpiry: daysDiff,
+                                                    completionStatus: status
+                                                });
                                             }
                                         }
                                     }
