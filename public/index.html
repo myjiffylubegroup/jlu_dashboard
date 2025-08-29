@@ -14,7 +14,9 @@
         }
         @keyframes verticalScroll {
             0% { transform: translateY(0); }
-            50% { transform: translateY(-30%); }
+            25% { transform: translateY(-25%); }
+            50% { transform: translateY(-50%); }
+            75% { transform: translateY(-75%); }
             100% { transform: translateY(0); }
         }
         .ticker-content {
@@ -122,8 +124,14 @@
                             
                             // Process each employee
                             employees.forEach(employee => {
-                                const certificationIssues = [];
-                                let totalCompleted = 0;
+                                // Parse hire date from hire info string
+                                let hireDate = null;
+                                if (employee.hireInfo && typeof employee.hireInfo === 'string') {
+                                    const match = employee.hireInfo.match(/(\d{2}\/\d{2}\/\d{4})/);
+                                    if (match) {
+                                        hireDate = match[1];
+                                    }
+                                }
                                 
                                 // Process certification rows (starting from row 3)
                                 for (let rowIndex = 3; rowIndex < rawData.length; rowIndex++) {
@@ -154,24 +162,40 @@
                                             expDate.setHours(0, 0, 0, 0);
                                             const daysDiff = Math.ceil((expDate - today) / (1000 * 60 * 60 * 24));
                                             
-                                            // Categorize the course
+                                            // Categorize the course more comprehensively
                                             let category = 'Other';
                                             if (courseName.includes('JTSS+ Orientation') || courseName.includes('Jiffy Lube and You') || 
-                                                courseName.includes('Customer Safety') || courseName.includes('Jteam Safety')) {
+                                                courseName.includes('Customer Safety') || courseName.includes('Jteam Safety') ||
+                                                courseName.includes('Customer Experience')) {
                                                 category = 'Safety & Orientation';
-                                            } else if (courseName.includes('JTSS+ Courtesy')) {
+                                            } else if (courseName.includes('JTSS+ Courtesy') || courseName.includes('Courtesy Technician')) {
                                                 category = 'Courtesy Technician';
-                                            } else if (courseName.includes('JTSS+ Lower Bay')) {
+                                            } else if (courseName.includes('JTSS+ Lower Bay') || courseName.includes('Lower Bay')) {
                                                 category = 'Lower Bay Technician';
-                                            } else if (courseName.includes('JTSS+ Upper Bay')) {
+                                            } else if (courseName.includes('JTSS+ Upper Bay') || courseName.includes('Upper Bay')) {
                                                 category = 'Upper Bay Technician';
-                                            } else if (courseName.includes('HSSE')) {
+                                            } else if (courseName.includes('JTSS+ Customer Service') || courseName.includes('Customer Service Advisor')) {
+                                                category = 'Customer Service Advisor';
+                                            } else if (courseName.includes('HSSE') || courseName.includes('Health, Safety')) {
                                                 category = 'HSSE';
-                                            } else if (courseName.includes('Management')) {
+                                            } else if (courseName.includes('Management Training') || courseName.includes('Role of The Manager') ||
+                                                courseName.includes('Customer Service') || courseName.includes('Build Your Team')) {
                                                 category = 'Management Training';
+                                            } else if (courseName.includes('Leadership') || courseName.includes('Leading at Jiffy Lube')) {
+                                                category = 'Leadership';
                                             } else if (courseName.includes('Service Specialist') || courseName.includes('Air Conditioning') || 
-                                                courseName.includes('Transmission') || courseName.includes('Battery')) {
+                                                courseName.includes('Transmission') || courseName.includes('Battery') ||
+                                                courseName.includes('Engine Cooling') || courseName.includes('Fuel Filter') ||
+                                                courseName.includes('Tire') || courseName.includes('Air Filter') ||
+                                                courseName.includes('Wiper') || courseName.includes('Light Bulb') ||
+                                                courseName.includes('Serpentine') || courseName.includes('Power Steering')) {
                                                 category = 'Service Specialist';
+                                            } else if (courseName.includes('Advanced Specialist') || courseName.includes('ASE') ||
+                                                courseName.includes('Engine Repair') || courseName.includes('Brakes') ||
+                                                courseName.includes('Electrical') || courseName.includes('Heating and Air')) {
+                                                category = 'Advanced Specialist';
+                                            } else if (courseName.includes('California BAR') || courseName.includes('California')) {
+                                                category = 'California Compliance';
                                             }
                                             
                                             if (daysDiff < 0) {
@@ -219,7 +243,7 @@
                                 processedEmployees.push({
                                     name: employee.name,
                                     displayName: displayName,
-                                    hireInfo: employee.hireInfo,
+                                    hireDate: hireDate,
                                     status: overallStatus,
                                     totalCompleted: totalCompleted,
                                     certificationSummary: Object.values(groupedIssues).slice(0, 4) // Limit to top 4 issues
@@ -376,7 +400,7 @@
                                                     },
                                                         React.createElement('div', { className: 'flex justify-between items-center mb-3' },
                                                             React.createElement('div', { className: 'text-xl font-bold text-white' }, 
-                                                                employee.displayName + ' | Hired: ' + (employee.hireInfo || '08/15/2023')
+                                                                employee.displayName + ' | Hired: ' + (employee.hireDate || 'Unknown')
                                                             ),
                                                             React.createElement('div', { className: 'text-xl font-bold text-white' }, employee.status.toUpperCase())
                                                         ),
@@ -428,7 +452,7 @@
                                                     },
                                                         React.createElement('div', { className: 'flex justify-between items-center mb-3' },
                                                             React.createElement('div', { className: 'text-xl font-bold text-gray-900' }, 
-                                                                employee.displayName + ' | Hired: ' + (employee.hireInfo || '10/03/2023')
+                                                                employee.displayName + ' | Hired: ' + (employee.hireDate || 'Unknown')
                                                             ),
                                                             React.createElement('div', { className: 'text-xl font-bold text-gray-900' }, 'WARNING')
                                                         ),
