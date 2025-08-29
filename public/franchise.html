@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>Franchise Overview Dashboard</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        .urgent-pulse {
+            animation: pulse 2s infinite;
+        }
+        @keyframes tickerScroll {
+            0% { transform: translateX(100%); }
+            100% { transform: translateX(-100%); }
+        }
+        .ticker-content {
+            animation: tickerScroll 45s linear infinite;
+            white-space: nowrap;
+        }
+        .ticker-container {
+            overflow: hidden;
+            background: linear-gradient(90deg, rgba(34,197,94,0.2) 0%, rgba(34,197,94,0.6) 50%, rgba(34,197,94,0.2) 100%);
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div id="root"></div>
+    <script>
+        window.addEventListener('load', function() {
+            const { useState, useEffect } = React;
+            
+            const FranchiseDashboard = () => {
+                const [currentTime, setCurrentTime] = useState(new Date());
+                const [storesData, setStoresData] = useState({});
+                const [franchiseData, setFranchiseData] = useState(null);
+                const [loading, setLoading] = useState(true);
+                const [error, setError] = useState(null);
+                
+                const stores = ['609', '1002', '1257', '1270', '1396', '1932', '2911', '4182'];
+                
+                useEffect(() => {
+                    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+                    return () => clearInterval(timer);
+                }, []);
+                
+                useEffect(() => {
+                    loadAllStoreData();
+                }, []);
+
+                const loadAllStoreData = async () => {
+                    try {
+                        setLoading(true);
+                        const today = new Date().toISOString().split('T')[0];
+                        
+                        // Load franchise dashboard first
+                        await loadFranchiseDashboard(today);
+                        
+                        // Load all store data
+                        const storePromises = stores.map(store => loadStoreData(store, today));
+                        const storeResults = await Promise.all(storePromises);
+                        
+                        const storesObj = {};
+                        storeResults.forEach((result, index) => {
+                            if (result) {
+                                storesObj[stores[index]] = result;
+                            }
+                        });
+                        
+                        setStoresData(storesObj);
+                        
+                    } catch (err) {
+                        setError('Failed to load franchise data: ' + err.message);
+                    } finally {
+                        setLoading(false);
+                    }
+                };
+
+                const loadFranchiseDashboard = async (date) => {
+                    const response = await fetch('/data/FranchiseDashboard_' + date + '.xlsx');
+                    if (!response.ok) return;
+                    
+                    const arrayBuffer = await response.arrayBuffer();
+                    const workbook = XLSX.read(arrayBuffer);
+                    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const rawData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
+                    
+                    setFranchiseData(rawData);
+                };
+
+                const loadStoreData = async (storeNumber, date) => {
+                    try {
+                        const filename = 'MDCReport_Store' + storeNumber + '_' + date + '.xlsx';
+                        const response = await fetch('/data/' + filename);
+                        if (!response.ok) return null;
+                        
+                        const arrayBuffer = await response.arrayBuffer();
+                        const workbook = XLSX.read(arrayBuffer);
+                        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                        const rawData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
+                        
+                        return processStoreData(storeNumber, rawData);
+                        
+                    } catch (err) {
+                        console.error('Error loading store', storeNumber, ':', err);
+                        return null;
+                    }
+                };
+
+                const processStoreData = (storeNumber, rawData) => {
+                    const employees = [];
+                    const quarterEndDate = getQuarterEndDate().quarterEnd;
+                    const daysToQuarterEnd = Math.ceil((quarterEndDate - new Date()) / (1000 * 60 * 60 * 24));
+                    
+                    if (rawData.length > 3) {
+                        const employeeRow = rawData[0] || [];
+                        const hireInfoRow = rawData[1] || [];
+                        
+                        for (let i = 1; i < employeeRow.length; i += 3) {
+                            const empName = employeeRow[i];
+                            if (empName && typeof empName === 'string' && empName.trim() !== '') {
+                                const employee = {
+                                    name: empName,
+                                    statusCol: i,
+                                    completionCol: i + 1,
+                                    expirationCol: i + 2
+                                };
+                                
+                                const issues = [];
+                                let totalCompleted = 0;
+                                
+                                for (let rowIndex = 3; rowIndex < rawData.length; rowIndex++) {
+                                    const row = rawData[rowIndex];
+                                    const courseName = row[0];
+                                    if (!courseName) continue;
+                                    
+                                    const status = row[employee.statusCol];
+                                    const completionDate = row[employee.completionCol];
+                                    const expirationDate = row[employee.expirationCol];
+                                    
+                                    if (status === 'C' || completionDate) totalCompleted++;
+                                    
+                                    if (expirationDate && typeof expirationDate === 'string' && expirationDate !== '') {
+                                        let expDate = new Date(expirationDate.includes('/') ? expirationDate.split(' ')[0] : expirationDate);
+                                        if (!isNaN(expDate.getTime())) {
+                                            const daysDiff = Math.ceil((expDate - new Date()) / (1000 * 60 * 60 * 24));
+                                            
+                                            if (daysDiff < 0) {
+                                                issues.push({ status: 'expired', days: Math.abs(daysDiff) });
+                                            } else if (daysDiff <= 30) {
+                                                issues.push({ status: 'critical', days: daysDiff });
+                                            } else if (daysDiff <= 60) {
+                                                issues.push({ status: 'warning', days: daysDiff });
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                let overallStatus = 'good';
+                                if (issues.some(i => i.status === 'expired')) overallStatus = 'expired';
+                                else if (issues.some(i => i.status === 'critical')) overallStatus = 'critical';
+                                else if (issues.some(i => i.status === 'warning')) overallStatus = 'warning';
+                                
+                                // Check if at risk by quarter end
+                                const atRiskByQuarterEnd = issues.some(issue => {
+                                    return issue.status === 'expired' || issue.status === 'critical' || 
+                                           (issue.status === 'warning' && issue.days <= daysToQuarterEnd);
+                                });
+                                
+                                employees.push({
+                                    name: empName,
+                                    status: overallStatus,
+                                    totalCompleted: totalCompleted,
+                                    issues: issues,
+                                    atRiskByQuarterEnd: atRiskByQuarterEnd
+                                });
+                            }
+                        }
+                    }
+                    
+                    const goodEmployees = employees.filter(emp => emp.status === 'good').length;
+                    const atRiskEmployees = employees.filter(emp => emp.atRiskByQuarterEnd).length;
+                    const currentCompliance = employees.length > 0 ? Math.round((goodEmployees / employees.length) * 100) : 100;
+                    const projectedCompliance = Math.max(0, 100 - Math.round((atRiskEmployees / employees.length) * 100));
+                    
+                    // Get critical issues (expiring within 7 days)
+                    const criticalIssues = [];
+                    employees.forEach(emp => {
+                        emp.issues.forEach(issue => {
+                            if (issue.status === 'expired' || (issue.status === 'critical' && issue.days <= 7)) {
+                                criticalIssues.push({
+                                    employee: emp.name,
+                                    status: issue.status,
+                                    days: issue.days
+                                });
+                            }
+                        });
+                    });
+                    
+                    return {
+                        storeNumber: storeNumber,
+                        totalEmployees: employees.length,
+                        goodEmployees: goodEmployees,
+                        atRiskEmployees: atRiskEmployees,
+                        currentCompliance: currentCompliance,
+                        projectedCompliance: projectedCompliance,
+                        criticalIssues: criticalIssues,
+                        employees: employees
+                    };
+                };
+
+                const getQuarterEndDate = () => {
+                    const now = new Date();
+                    const year = now.getFullYear();
+                    const month = now.getMonth();
+                    
+                    if (month < 3) return { quarterEnd: new Date(year, 2, 31), quarterName: "Q1" };
+                    if (month < 6) return { quarterEnd: new Date(year, 5, 30), quarterName: "Q2" };
+                    if (month < 9) return { quarterEnd: new Date(year, 8, 30), quarterName: "Q3" };
+                    return { quarterEnd: new Date(year, 11, 31), quarterName: "Q4" };
+                };
+
+                const getStoreStatusColor = (current, projected) => {
+                    if (current < 90) return 'bg-red-500 border-red-600';
+                    if (projected < 80) return 'bg-red-500 border-red-600';
+                    if (projected < 95) return 'bg-yellow-500 border-yellow-600';
+                    return 'bg-green-500 border-green-600';
+                };
+
+                const getStoreStatusLevel = (current, projected) => {
+                    if (current < 90) return 'critical';
+                    if (projected < 80) return 'critical';
+                    if (projected < 95) return 'warning';
+                    return 'good';
+                };
+
+                if (loading) {
+                    return React.createElement('div', {
+                        className: 'min-h-screen bg-gray-100 flex items-center justify-center'
+                    },
+                        React.createElement('div', { className: 'text-center' },
+                            React.createElement('div', { className: 'text-3xl font-bold mb-4 text-blue-600' }, 'Loading Franchise Data...'),
+                            React.createElement('div', { className: 'text-gray-600' }, 'Processing all store certifications...')
+                        )
+                    );
+                }
+
+                if (error) {
+                    return React.createElement('div', {
+                        className: 'min-h-screen bg-gray-100 flex items-center justify-center'
+                    },
+                        React.createElement('div', { className: 'text-center max-w-lg' },
+                            React.createElement('div', { className: 'text-2xl font-bold mb-4 text-red-600' }, 'Error Loading Data'),
+                            React.createElement('div', { className: 'mb-4 text-sm bg-red-100 p-4 rounded border text-red-800' }, error)
+                        )
+                    );
+                }
+
+                const storeDataArray = Object.values(storesData);
+                const totalEmployees = storeDataArray.reduce((sum, store) => sum + store.totalEmployees, 0);
+                const totalGoodEmployees = storeDataArray.reduce((sum, store) => sum + store.goodEmployees, 0);
+                const totalAtRisk = storeDataArray.reduce((sum, store) => sum + store.atRiskEmployees, 0);
+                const franchiseCompliance = totalEmployees > 0 ? Math.round((totalGoodEmployees / totalEmployees) * 100) : 100;
+                const franchiseProjected = Math.max(0, 100 - Math.round((totalAtRisk / totalEmployees) * 100));
+                
+                const compliantStores = storeDataArray.filter(store => store.projectedCompliance >= 95).length;
+                const warningStores = storeDataArray.filter(store => store.projectedCompliance >= 80 && store.projectedCompliance < 95).length;
+                const criticalStores = storeDataArray.filter(store => store.projectedCompliance < 80).length;
+                
+                // Get all critical issues across franchise
+                const allCriticalIssues = [];
+                storeDataArray.forEach(store => {
+                    store.criticalIssues.forEach(issue => {
+                        allCriticalIssues.push({
+                            ...issue,
+                            store: store.storeNumber
+                        });
+                    });
+                });
+                
+                const quarterData = getQuarterEndDate();
+                const timeToQuarterEnd = quarterData.quarterEnd - new Date();
+                const daysLeft = Math.ceil(timeToQuarterEnd / (1000 * 60 * 60 * 24));
+                
+                return React.createElement('div', {
+                    className: 'min-h-screen bg-gray-100'
+                },
+                    // Success ticker
+                    totalGoodEmployees > 0 ? React.createElement('div', { 
+                        className: 'ticker-container border-b-2 border-green-400 py-3' 
+                    },
+                        React.createElement('div', { className: 'ticker-content text-green-800 font-bold text-lg' },
+                            'FRANCHISE SUCCESS: ' + totalGoodEmployees + ' of ' + totalEmployees + ' employees certified and current! ' +
+                            compliantStores + ' stores projected compliant for quarter end! 🌟'
+                        )
+                    ) : null,
+
+                    React.createElement('div', { className: 'p-6' },
+                        // Header
+                        React.createElement('div', { className: 'mb-8' },
+                            React.createElement('div', { className: 'flex items-center justify-between' },
+                                React.createElement('div', null,
+                                    React.createElement('h1', { className: 'text-4xl font-bold text-gray-900 mb-2' }, 'My Jiffy Lube Group - Franchise Overview'),
+                                    React.createElement('p', { className: 'text-lg text-gray-600' }, '8 Stores • ' + totalEmployees + ' Employees • Real-time Certification Tracking')
+                                ),
+                                React.createElement('div', { className: 'text-right' },
+                                    React.createElement('div', { className: 'text-2xl font-mono font-bold text-gray-900' }, currentTime.toLocaleTimeString()),
+                                    React.createElement('div', { className: 'text-lg text-gray-600' }, currentTime.toLocaleDateString())
+                                )
+                            )
+                        ),
+                        
+                        // Franchise Summary Cards
+                        React.createElement('div', { className: 'grid grid-cols-2 lg:grid-cols-4 gap-6 mb-8' },
+                            React.createElement('div', { className: 'bg-white rounded-xl p-6 shadow-lg border-l-4 border-blue-500' },
+                                React.createElement('div', { className: 'text-3xl font-bold text-blue-600 mb-1' }, franchiseCompliance + '%'),
+                                React.createElement('div', { className: 'text-gray-600 font-medium' }, 'Current Compliance'),
+                                React.createElement('div', { className: 'text-sm text-gray-500 mt-1' }, totalGoodEmployees + ' of ' + totalEmployees + ' employees')
+                            ),
+                            
+                            React.createElement('div', { className: 'bg-white rounded-xl p-6 shadow-lg border-l-4 border-purple-500' },
+                                React.createElement('div', { className: 'text-3xl font-bold text-purple-600 mb-1' }, franchiseProjected + '%'),
+                                React.createElement('div', { className: 'text-gray-600 font-medium' }, 'Projected Q' + quarterData.quarterName.replace('Q', '') + ' End'),
+                                React.createElement('div', { className: 'text-sm text-gray-500 mt-1' }, totalAtRisk + ' employees at risk')
+                            ),
+                            
+                            React.createElement('div', { className: 'bg-white rounded-xl p-6 shadow-lg border-l-4 border-green-500' },
+                                React.createElement('div', { className: 'text-3xl font-bold text-green-600 mb-1' }, compliantStores + ' of 8'),
+                                React.createElement('div', { className: 'text-gray-600 font-medium' }, 'Stores Compliant'),
+                                React.createElement('div', { className: 'text-sm text-gray-500 mt-1' }, warningStores + ' warning, ' + criticalStores + ' critical')
+                            ),
+                            
+                            React.createElement('div', { className: 'bg-white rounded-xl p-6 shadow-lg border-l-4 border-red-500' },
+                                React.createElement('div', { className: 'text-3xl font-bold text-red-600 mb-1' }, allCriticalIssues.length),
+                                React.createElement('div', { className: 'text-gray-600 font-medium' }, 'Critical Issues'),
+                                React.createElement('div', { className: 'text-sm text-gray-500 mt-1' }, 'Expiring within 7 days')
+                            )
+                        ),
+
+                        // Store Grid
+                        React.createElement('div', { className: 'mb-8' },
+                            React.createElement('h2', { className: 'text-2xl font-bold text-gray-900 mb-4' }, 'Store Status Overview'),
+                            React.createElement('div', { className: 'grid grid-cols-2 lg:grid-cols-4 gap-4' },
+                                stores.map(storeNum => {
+                                    const storeData = storesData[storeNum];
+                                    if (!storeData) {
+                                        return React.createElement('div', {
+                                            key: storeNum,
+                                            className: 'bg-gray-200 rounded-lg p-4 border-2 border-gray-300'
+                                        },
+                                            React.createElement('div', { className: 'text-center' },
+                                                React.createElement('div', { className: 'text-xl font-bold text-gray-500 mb-2' }, 'Store ' + storeNum),
+                                                React.createElement('div', { className: 'text-sm text-gray-500' }, 'No Data')
+                                            )
+                                        );
+                                    }
+                                    
+                                    const statusColor = getStoreStatusColor(storeData.currentCompliance, storeData.projectedCompliance);
+                                    const statusLevel = getStoreStatusLevel(storeData.currentCompliance, storeData.projectedCompliance);
+                                    
+                                    return React.createElement('a', {
+                                        key: storeNum,
+                                        href: 'store-dashboard.html?store=' + storeNum,
+                                        className: 'block bg-white rounded-lg p-4 border-2 border-gray-200 hover:border-blue-400 hover:shadow-lg transition-all duration-200 ' + 
+                                                  (statusLevel === 'critical' ? 'urgent-pulse' : '')
+                                    },
+                                        React.createElement('div', { className: 'flex items-center justify-between mb-3' },
+                                            React.createElement('div', { className: 'text-xl font-bold text-gray-900' }, 'Store ' + storeNum),
+                                            React.createElement('div', { 
+                                                className: 'w-4 h-4 rounded-full border-2 ' + statusColor 
+                                            })
+                                        ),
+                                        React.createElement('div', { className: 'space-y-1' },
+                                            React.createElement('div', { className: 'flex justify-between text-sm' },
+                                                React.createElement('span', { className: 'text-gray-600' }, 'Current:'),
+                                                React.createElement('span', { className: 'font-semibold' }, storeData.currentCompliance + '%')
+                                            ),
+                                            React.createElement('div', { className: 'flex justify-between text-sm' },
+                                                React.createElement('span', { className: 'text-gray-600' }, 'Projected:'),
+                                                React.createElement('span', { 
+                                                    className: 'font-semibold ' + (storeData.projectedCompliance < 80 ? 'text-red-600' : 
+                                                                                   storeData.projectedCompliance < 95 ? 'text-yellow-600' : 'text-green-600')
+                                                }, storeData.projectedCompliance + '%')
+                                            ),
+                                            React.createElement('div', { className: 'flex justify-between text-sm' },
+                                                React.createElement('span', { className: 'text-gray-600' }, 'Employees:'),
+                                                React.createElement('span', { className: 'font-semibold' }, storeData.totalEmployees)
+                                            ),
+                                            storeData.atRiskEmployees > 0 ? 
+                                                React.createElement('div', { className: 'text-xs text-red-600 font-medium mt-2' }, 
+                                                    storeData.atRiskEmployees + ' at risk'
+                                                ) : null
+                                        )
+                                    );
+                                })
+                            )
+                        ),
+
+                        // Critical Issues List
+                        allCriticalIssues.length > 0 ? React.createElement('div', { className: 'mb-8' },
+                            React.createElement('h2', { className: 'text-2xl font-bold text-red-700 mb-4 flex items-center' },
+                                React.createElement('span', { className: 'mr-2 text-2xl' }, '🚨'),
+                                'Critical Issues - Action Required Now'
+                            ),
+                            React.createElement('div', { className: 'bg-red-50 rounded-lg p-6 border-2 border-red-200' },
+                                React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4' },
+                                    allCriticalIssues.slice(0, 12).map((issue, index) =>
+                                        React.createElement('div', {
+                                            key: index,
+                                            className: 'bg-white rounded-lg p-3 border border-red-300'
+                                        },
+                                            React.createElement('div', { className: 'font-bold text-red-800' }, 'Store ' + issue.store + ' - ' + issue.employee.split(', ')[1]),
+                                            React.createElement('div', { className: 'text-sm text-red-600' }, 
+                                                issue.status === 'expired' ? 'EXPIRED ' + issue.days + ' days ago' : 'Expires in ' + issue.days + ' days'
+                                            )
+                                        )
+                                    )
+                                ),
+                                allCriticalIssues.length > 12 ? 
+                                    React.createElement('div', { className: 'text-center mt-4 text-red-700 font-semibold' },
+                                        'And ' + (allCriticalIssues.length - 12) + ' more critical issues...'
+                                    ) : null
+                            )
+                        ) : null
+                    ),
+                    
+                    // Quarter End Status
+                    React.createElement('div', { 
+                        className: 'mx-6 mb-6 rounded-2xl p-6 border-2 ' + (
+                            franchiseProjected >= 95 ? 'bg-green-100 border-green-500' :
+                            franchiseProjected >= 80 ? 'bg-yellow-100 border-yellow-500' : 
+                            'bg-red-100 border-red-500'
+                        )
+                    },
+                        React.createElement('div', { className: 'text-center' },
+                            React.createElement('div', { className: 'text-3xl font-bold mb-2 text-gray-900' }, 
+                                quarterData.quarterName + ' ENDS IN: ' + daysLeft + ' DAYS'
+                            ),
+                            React.createElement('div', { className: 'text-xl font-bold mb-2 text-gray-900' }, 
+                                'FRANCHISE STATUS: ' + franchiseCompliance + '% Current → ' + franchiseProjected + '% Projected'
+                            ),
+                            React.createElement('div', { className: 'text-lg font-semibold text-gray-700' }, 
+                                compliantStores + ' of 8 stores projected compliant • ' + totalAtRisk + ' employees need renewals'
+                            )
+                        )
+                    ),
+                    
+                    // Footer
+                    React.createElement('div', { className: 'border-t-2 border-gray-200 p-4 bg-white' },
+                        React.createElement('div', { className: 'text-center' },
+                            React.createElement('div', { className: 'text-gray-500 text-sm' }, 
+                                'Last Updated: ' + currentTime.toLocaleString() + ' | Click any store for detailed view | Franchise-wide overview'
+                            )
+                        )
+                    )
+                );
+            };
+            
+            ReactDOM.render(React.createElement(FranchiseDashboard), document.getElementById('root'));
+        });
+    </script>
+</body>
+</html>
