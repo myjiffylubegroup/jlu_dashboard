@@ -184,8 +184,8 @@
                         setError(null);
                         
                         // Try to load the current file format
-                        const today = new Date().toISOString().split('T')[0].replace(/-/g, '');
-                        const filename = `MDCReport${storeNumber}${today}_065839.xlsx`;
+                        const today = new Date().toISOString().split('T')[0];
+                        const filename = `MDCReport_Store${storeNumber}_${today}.xlsx`;
                         
                         const response = await fetch(`/data/${filename}`);
                         if (!response.ok) {
