@@ -130,6 +130,9 @@
                                 }
 
                                 const certificationIssues = [];
+                                const expiredItems = [];
+                                const criticalItems = [];
+                                const warningItems = [];
                                 let totalCompleted = 0;
                                 
                                 for (let rowIndex = 3; rowIndex < rawData.length; rowIndex++) {
@@ -196,33 +199,31 @@
                                                 category = 'California Compliance';
                                             }
                                             
+                                            // Create the item object with employee name
+                                            const itemData = {
+                                                employeeName: employee.name,
+                                                category: category,
+                                                courseName: courseName,
+                                                daysUntilExpiry: daysDiff,
+                                                completionStatus: status
+                                            };
+                                            
                                             // Check for expired, critical, or warning status based on expiration date
-                                            // This applies whether status is C, blank, or anything else
                                             if (daysDiff < 0) {
-                                                certificationIssues.push({ 
-                                                    category: category, 
-                                                    status: 'expired', 
-                                                    courseName: courseName, 
-                                                    daysPastDue: Math.abs(daysDiff), 
-                                                    daysUntilExpiry: daysDiff,
-                                                    completionStatus: status
-                                                });
+                                                itemData.status = 'expired';
+                                                itemData.daysPastDue = Math.abs(daysDiff);
+                                                expiredItems.push(itemData);
+                                                certificationIssues.push(itemData);
                                             } else if (daysDiff <= 30) {
-                                                certificationIssues.push({ 
-                                                    category: category, 
-                                                    status: 'critical', 
-                                                    courseName: courseName, 
-                                                    daysUntilExpiry: daysDiff,
-                                                    completionStatus: status
-                                                });
+                                                itemData.status = 'critical';
+                                                itemData.daysInfo = daysDiff + ' days left';
+                                                criticalItems.push(itemData);
+                                                certificationIssues.push(itemData);
                                             } else if (daysDiff <= 60) {
-                                                certificationIssues.push({ 
-                                                    category: category, 
-                                                    status: 'warning', 
-                                                    courseName: courseName, 
-                                                    daysUntilExpiry: daysDiff,
-                                                    completionStatus: status
-                                                });
+                                                itemData.status = 'warning';
+                                                itemData.daysInfo = daysDiff + ' days left';
+                                                warningItems.push(itemData);
+                                                certificationIssues.push(itemData);
                                             }
                                         }
                                     }
@@ -267,7 +268,10 @@
                                     hireDate: hireDate,
                                     status: overallStatus,
                                     totalCompleted: totalCompleted,
-                                    certificationSummary: summaryArray
+                                    certificationSummary: summaryArray,
+                                    expiredItems: expiredItems,
+                                    criticalItems: criticalItems,
+                                    warningItems: warningItems
                                 });
                             });
                         }
@@ -338,12 +342,7 @@
 
                 const goodEmployees = employees.filter(emp => emp.status === 'good');
                 
-                // Collect all certification issues across all employees
-                const allExpiredItems = [];
-                const allCriticalItems = [];
-                const allWarningItems = [];
-                
-                // Collect all certification issues across all employees
+                // Collect all certification issues across all employees - FIXED VERSION
                 const allExpiredItems = [];
                 const allCriticalItems = [];
                 const allWarningItems = [];
@@ -433,7 +432,7 @@
                                                     },
                                                         React.createElement('div', { className: 'font-bold text-red-800' }, item.employeeName),
                                                         React.createElement('div', { className: 'text-red-700' }, item.category),
-                                                        React.createElement('div', { className: 'text-red-600 font-semibold text-sm' }, 'EXPIRED')
+                                                        React.createElement('div', { className: 'text-red-600 font-semibold text-sm' }, 'EXPIRED ' + item.daysPastDue + ' days ago')
                                                     )
                                                 )
                                             )
