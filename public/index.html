@@ -343,26 +343,15 @@
                 const allCriticalItems = [];
                 const allWarningItems = [];
                 
-                console.log('Collecting items from all employees...');
-                employees.forEach(emp => {
-                    if (emp.expiredItems) {
-                        console.log(`Adding ${emp.expiredItems.length} expired items from ${emp.displayName}`);
-                        allExpiredItems.push(...emp.expiredItems);
-                    }
-                    if (emp.criticalItems) {
-                        console.log(`Adding ${emp.criticalItems.length} critical items from ${emp.displayName}`);
-                        allCriticalItems.push(...emp.criticalItems);
-                    }
-                    if (emp.warningItems) {
-                        console.log(`Adding ${emp.warningItems.length} warning items from ${emp.displayName}`);
-                        allWarningItems.push(...emp.warningItems);
-                    }
-                });
+                // Collect all certification issues across all employees
+                const allExpiredItems = [];
+                const allCriticalItems = [];
+                const allWarningItems = [];
                 
-                console.log('Final counts:', {
-                    expired: allExpiredItems.length,
-                    critical: allCriticalItems.length,
-                    warning: allWarningItems.length
+                employees.forEach(emp => {
+                    if (emp.expiredItems) allExpiredItems.push(...emp.expiredItems);
+                    if (emp.criticalItems) allCriticalItems.push(...emp.criticalItems);
+                    if (emp.warningItems) allWarningItems.push(...emp.warningItems);
                 });
                 
                 const quarterData = getQuarterEndDate();
