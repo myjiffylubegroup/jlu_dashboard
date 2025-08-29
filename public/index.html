@@ -88,20 +88,149 @@
                             throw new Error('Could not load ' + filename + ': ' + response.status);
                         }
                         
-                        // For now, just set test data until we add back the complex parsing
-                        setEmployees([
-                            { name: 'MORALES, ANDY', status: 'expired', totalCompleted: 45, displayName: 'Andy M.' },
-                            { name: 'RUIZ, ERIC', status: 'critical', totalCompleted: 67, displayName: 'Eric R.' },
-                            { name: 'HERNANDEZ, BRYAN', status: 'critical', totalCompleted: 89, displayName: 'Bryan H.' },
-                            { name: 'CUGUA, MYNOR', status: 'warning', totalCompleted: 95, displayName: 'Mynor C.' },
-                            { name: 'NATH, CHRIS', status: 'warning', totalCompleted: 91, displayName: 'Chris N.' },
-                            { name: 'JOHNSON, MIKE', status: 'good', totalCompleted: 120, displayName: 'Mike J.' },
-                            { name: 'SMITH, SARAH', status: 'good', totalCompleted: 98, displayName: 'Sarah S.' },
-                            { name: 'GARCIA, LUIS', status: 'good', totalCompleted: 105, displayName: 'Luis G.' },
-                            { name: 'BROWN, JESSICA', status: 'good', totalCompleted: 87, displayName: 'Jessica B.' },
-                            { name: 'WILSON, DAVID', status: 'good', totalCompleted: 142, displayName: 'David W.' }
-                        ]);
-                        setStoreInfo({ storeNumber: storeNumber, totalEmployees: 10 });
+                        const arrayBuffer = await response.arrayBuffer();
+                        const workbook = XLSX.read(arrayBuffer);
+                        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                        const rawData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
+                        
+                        console.log('Raw data rows:', rawData.length);
+                        
+                        const processedEmployees = [];
+                        
+                        if (rawData.length > 3) {
+                            const employeeRow = rawData[0] || [];
+                            const hireInfoRow = rawData[1] || [];
+                            const employees = [];
+                            
+                            // Extract employee names and hire info (every 3rd column starting from index 1)
+                            for (let i = 1; i < employeeRow.length; i += 3) {
+                                const empName = employeeRow[i];
+                                const hireInfo = hireInfoRow[i];
+                                
+                                if (empName && typeof empName === 'string' && empName.trim() !== '') {
+                                    employees.push({
+                                        name: empName,
+                                        hireInfo: hireInfo,
+                                        statusCol: i,
+                                        completionCol: i + 1,
+                                        expirationCol: i + 2
+                                    });
+                                }
+                            }
+                            
+                            console.log('Found employees:', employees.map(e => e.name));
+                            
+                            // Process each employee
+                            employees.forEach(employee => {
+                                const certificationIssues = [];
+                                let totalCompleted = 0;
+                                
+                                // Process certification rows (starting from row 3)
+                                for (let rowIndex = 3; rowIndex < rawData.length; rowIndex++) {
+                                    const row = rawData[rowIndex];
+                                    const courseName = row[0];
+                                    
+                                    if (!courseName || typeof courseName !== 'string') continue;
+                                    
+                                    const status = row[employee.statusCol];
+                                    const completionDate = row[employee.completionCol];
+                                    const expirationDate = row[employee.expirationCol];
+                                    
+                                    if (status === 'C' || completionDate) {
+                                        totalCompleted++;
+                                    }
+                                    
+                                    if (expirationDate && typeof expirationDate === 'string' && expirationDate !== '') {
+                                        let expDate;
+                                        if (expirationDate.includes('/')) {
+                                            expDate = new Date(expirationDate.split(' ')[0]);
+                                        } else {
+                                            expDate = new Date(expirationDate);
+                                        }
+                                        
+                                        if (!isNaN(expDate.getTime())) {
+                                            const today = new Date();
+                                            today.setHours(0, 0, 0, 0);
+                                            expDate.setHours(0, 0, 0, 0);
+                                            const daysDiff = Math.ceil((expDate - today) / (1000 * 60 * 60 * 24));
+                                            
+                                            // Categorize the course
+                                            let category = 'Other';
+                                            if (courseName.includes('JTSS+ Orientation') || courseName.includes('Jiffy Lube and You') || 
+                                                courseName.includes('Customer Safety') || courseName.includes('Jteam Safety')) {
+                                                category = 'Safety & Orientation';
+                                            } else if (courseName.includes('JTSS+ Courtesy')) {
+                                                category = 'Courtesy Technician';
+                                            } else if (courseName.includes('JTSS+ Lower Bay')) {
+                                                category = 'Lower Bay Technician';
+                                            } else if (courseName.includes('JTSS+ Upper Bay')) {
+                                                category = 'Upper Bay Technician';
+                                            } else if (courseName.includes('HSSE')) {
+                                                category = 'HSSE';
+                                            } else if (courseName.includes('Management')) {
+                                                category = 'Management Training';
+                                            } else if (courseName.includes('Service Specialist') || courseName.includes('Air Conditioning') || 
+                                                courseName.includes('Transmission') || courseName.includes('Battery')) {
+                                                category = 'Service Specialist';
+                                            }
+                                            
+                                            if (daysDiff < 0) {
+                                                certificationIssues.push({ category: category, status: 'expired', courseName: courseName, daysPastDue: Math.abs(daysDiff) });
+                                            } else if (daysDiff <= 30) {
+                                                certificationIssues.push({ category: category, status: 'critical', courseName: courseName, daysUntilExpiry: daysDiff });
+                                            } else if (daysDiff <= 60) {
+                                                certificationIssues.push({ category: category, status: 'warning', courseName: courseName, daysUntilExpiry: daysDiff });
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                // Group issues by category and status
+                                const groupedIssues = {};
+                                certificationIssues.forEach(issue => {
+                                    const key = issue.category + '_' + issue.status;
+                                    if (!groupedIssues[key]) {
+                                        groupedIssues[key] = {
+                                            category: issue.category,
+                                            status: issue.status,
+                                            moduleCount: 0
+                                        };
+                                    }
+                                    groupedIssues[key].moduleCount++;
+                                });
+                                
+                                // Determine overall employee status
+                                let overallStatus = 'good';
+                                if (certificationIssues.some(issue => issue.status === 'expired')) {
+                                    overallStatus = 'expired';
+                                } else if (certificationIssues.some(issue => issue.status === 'critical')) {
+                                    overallStatus = 'critical';
+                                } else if (certificationIssues.some(issue => issue.status === 'warning')) {
+                                    overallStatus = 'warning';
+                                }
+                                
+                                // Format employee name
+                                let displayName = employee.name;
+                                const parts = employee.name.split(', ');
+                                if (parts.length === 2) {
+                                    displayName = parts[1] + ' ' + parts[0].charAt(0) + '.';
+                                }
+                                
+                                processedEmployees.push({
+                                    name: employee.name,
+                                    displayName: displayName,
+                                    hireInfo: employee.hireInfo,
+                                    status: overallStatus,
+                                    totalCompleted: totalCompleted,
+                                    certificationSummary: Object.values(groupedIssues).slice(0, 4) // Limit to top 4 issues
+                                });
+                            });
+                        }
+                        
+                        console.log('Processed ' + processedEmployees.length + ' employees for store ' + storeNumber);
+                        
+                        setEmployees(processedEmployees);
+                        setStoreInfo({ storeNumber: storeNumber, totalEmployees: processedEmployees.length });
                         
                     } catch (err) {
                         console.error('Error loading Excel data:', err);
@@ -246,18 +375,29 @@
                                                         className: 'rounded-xl p-5 border-2 min-h-[160px] ' + (employee.status === 'expired' ? 'bg-red-500 border-red-600' : 'bg-red-400 border-red-500')
                                                     },
                                                         React.createElement('div', { className: 'flex justify-between items-center mb-3' },
-                                                            React.createElement('div', { className: 'text-xl font-bold text-white' }, employee.displayName + ' | Hired: 08/15/2023'),
+                                                            React.createElement('div', { className: 'text-xl font-bold text-white' }, 
+                                                                employee.displayName + ' | Hired: ' + (employee.hireInfo || '08/15/2023')
+                                                            ),
                                                             React.createElement('div', { className: 'text-xl font-bold text-white' }, employee.status.toUpperCase())
                                                         ),
                                                         React.createElement('div', { className: 'space-y-2' },
-                                                            React.createElement('div', { className: 'flex justify-between items-center p-3 rounded bg-black/20' },
-                                                                React.createElement('span', { className: 'font-semibold text-white' }, 'Expired: Safety & Orientation'),
-                                                                React.createElement('span', { className: 'text-white font-bold' }, '7 modules')
-                                                            ),
-                                                            React.createElement('div', { className: 'flex justify-between items-center p-3 rounded bg-black/20' },
-                                                                React.createElement('span', { className: 'font-semibold text-white' }, 'Critical: Lower Bay Technician'),
-                                                                React.createElement('span', { className: 'text-white font-bold' }, '3 modules')
-                                                            )
+                                                            employee.certificationSummary && employee.certificationSummary.length > 0 ?
+                                                                employee.certificationSummary.map((issue, i) =>
+                                                                    React.createElement('div', { 
+                                                                        key: i, 
+                                                                        className: 'flex justify-between items-center p-3 rounded bg-black/20'
+                                                                    },
+                                                                        React.createElement('span', { className: 'font-semibold text-white' }, 
+                                                                            issue.status.charAt(0).toUpperCase() + issue.status.slice(1) + ': ' + issue.category
+                                                                        ),
+                                                                        React.createElement('span', { className: 'text-white font-bold' }, 
+                                                                            issue.moduleCount + ' module' + (issue.moduleCount !== 1 ? 's' : '')
+                                                                        )
+                                                                    )
+                                                                ) :
+                                                                React.createElement('div', { className: 'p-3 rounded bg-black/20' },
+                                                                    React.createElement('span', { className: 'text-white' }, 'No specific issues found')
+                                                                )
                                                         )
                                                     )
                                                 )
@@ -287,18 +427,29 @@
                                                         className: 'rounded-xl p-5 border-2 bg-yellow-400 border-yellow-500 min-h-[160px]'
                                                     },
                                                         React.createElement('div', { className: 'flex justify-between items-center mb-3' },
-                                                            React.createElement('div', { className: 'text-xl font-bold text-gray-900' }, employee.displayName + ' | Hired: 10/03/2023'),
+                                                            React.createElement('div', { className: 'text-xl font-bold text-gray-900' }, 
+                                                                employee.displayName + ' | Hired: ' + (employee.hireInfo || '10/03/2023')
+                                                            ),
                                                             React.createElement('div', { className: 'text-xl font-bold text-gray-900' }, 'WARNING')
                                                         ),
                                                         React.createElement('div', { className: 'space-y-2' },
-                                                            React.createElement('div', { className: 'flex justify-between items-center p-3 rounded bg-black/20' },
-                                                                React.createElement('span', { className: 'font-semibold text-white' }, 'Warning: Safety & Orientation'),
-                                                                React.createElement('span', { className: 'text-white font-bold' }, '6 modules')
-                                                            ),
-                                                            React.createElement('div', { className: 'flex justify-between items-center p-3 rounded bg-black/20' },
-                                                                React.createElement('span', { className: 'font-semibold text-white' }, 'Warning: HSSE'),
-                                                                React.createElement('span', { className: 'text-white font-bold' }, '2 modules')
-                                                            )
+                                                            employee.certificationSummary && employee.certificationSummary.length > 0 ?
+                                                                employee.certificationSummary.filter(issue => issue.status === 'warning').map((issue, i) =>
+                                                                    React.createElement('div', { 
+                                                                        key: i, 
+                                                                        className: 'flex justify-between items-center p-3 rounded bg-black/20'
+                                                                    },
+                                                                        React.createElement('span', { className: 'font-semibold text-white' }, 
+                                                                            'Warning: ' + issue.category
+                                                                        ),
+                                                                        React.createElement('span', { className: 'text-white font-bold' }, 
+                                                                            issue.moduleCount + ' module' + (issue.moduleCount !== 1 ? 's' : '')
+                                                                        )
+                                                                    )
+                                                                ) :
+                                                                React.createElement('div', { className: 'p-3 rounded bg-black/20' },
+                                                                    React.createElement('span', { className: 'text-white' }, 'No specific issues found')
+                                                                )
                                                         )
                                                     )
                                                 )
