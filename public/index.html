@@ -47,6 +47,7 @@
                 const [currentTime, setCurrentTime] = useState(new Date());
                 const [employees, setEmployees] = useState([]);
                 const [storeInfo, setStoreInfo] = useState({});
+                const [franchiseTargets, setFranchiseTargets] = useState({});
                 const [loading, setLoading] = useState(true);
                 const [error, setError] = useState(null);
                 const [tickerEmployees, setTickerEmployees] = useState([]);
@@ -61,6 +62,7 @@
                 
                 useEffect(() => {
                     loadStoreExcelData(currentStore);
+                    loadFranchiseDashboard();
                 }, [currentStore]);
 
                 useEffect(() => {
@@ -75,6 +77,49 @@
 
                     return () => clearInterval(interval);
                 }, [employees]);
+
+                const loadFranchiseDashboard = async () => {
+                    try {
+                        const today = new Date().toISOString().split('T')[0];
+                        const filename = 'FranchiseDashboard_' + today + '.xlsx';
+                        
+                        const response = await fetch('/data/' + filename);
+                        if (!response.ok) {
+                            console.warn('Could not load franchise dashboard:', filename);
+                            return;
+                        }
+                        
+                        const arrayBuffer = await response.arrayBuffer();
+                        const workbook = XLSX.read(arrayBuffer);
+                        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                        const rawData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
+                        
+                        console.log('Franchise dashboard loaded, rows:', rawData.length);
+                        
+                        // Find the store row in the franchise data
+                        const storeRow = rawData.find(row => row[2] && row[2].toString() === currentStore);
+                        
+                        if (storeRow) {
+                            const targets = {
+                                totalEmployees: storeRow[7] || 0,
+                                courtesyTechnician: { completed: storeRow[32] || 0, total: storeRow[33] || 0, target: 100 },
+                                lowerBayTechnician: { completed: storeRow[36] || 0, total: storeRow[37] || 0, target: 100 },
+                                upperBayTechnician: { completed: storeRow[40] || 0, total: storeRow[41] || 0, target: 100 },
+                                customerServiceAdvisor: { completed: storeRow[44] || 0, total: storeRow[45] || 0, target: 100 },
+                                teamLeaderServiceTech: { completed: storeRow[48] || 0, total: storeRow[49] || 0, target: 40 },
+                                serviceSpecialist: { completed: storeRow[52] || 0, total: storeRow[53] || 0, target: 50 },
+                                advancedSpecialist: { completed: storeRow[56] || 0, total: storeRow[57] || 0, target: 25 },
+                                hsse: { completed: storeRow[64] || 0, total: storeRow[65] || 0, target: 100 }
+                            };
+                            
+                            console.log('Store', currentStore, 'franchise targets:', targets);
+                            setFranchiseTargets(targets);
+                        }
+                        
+                    } catch (err) {
+                        console.error('Error loading franchise dashboard:', err);
+                    }
+                };
 
                 const loadStoreExcelData = async (storeNumber) => {
                     try {
@@ -315,29 +360,67 @@
                 };
 
                 const getComplianceStatus = () => {
-                    if (employees.length === 0) return { percentage: 100, level: 'good', message: 'All Good!' };
+                    if (employees.length === 0) return { 
+                        current: { percentage: 100, level: 'good', message: 'All Good!' },
+                        projected: { percentage: 100, level: 'good', message: 'All Good!' }
+                    };
                     
-                    const compliantEmployees = employees.filter(emp => emp.status === 'good').length;
-                    const percentage = Math.round((compliantEmployees / employees.length) * 100);
+                    // Current compliance
+                    const currentCompliantEmployees = employees.filter(emp => emp.status === 'good').length;
+                    const currentPercentage = Math.round((currentCompliantEmployees / employees.length) * 100);
                     
-                    let level = 'good';
-                    let message = 'All Good!';
+                    // Project quarter end compliance (worst case - assume expiring certs don't renew)
+                    const quarterData = getQuarterEndDate();
+                    const quarterEndDate = quarterData.quarterEnd;
                     
-                    if (percentage >= 95) {
-                        level = 'good';
-                        message = 'Almost Perfect! Watch those expiring modules';
-                    } else if (percentage >= 90) {
-                        level = 'good';
-                        message = 'Good Progress! Keep pushing for 100%';
-                    } else if (percentage >= 80) {
-                        level = 'warning';
-                        message = 'Getting Sketchy! Time to step it up';
-                    } else {
-                        level = 'danger';
-                        message = 'Completely Unacceptable! All hands on deck NOW!';
-                    }
+                    let projectedCompliantEmployees = currentCompliantEmployees;
                     
-                    return { percentage: percentage, level: level, message: message };
+                    // For each employee with warnings or critical issues, check if they'll be non-compliant by quarter end
+                    employees.forEach(emp => {
+                        if (emp.status === 'good') {
+                            // Check if any of their certifications expire before quarter end
+                            const allItems = [
+                                ...(emp.criticalItems || []),
+                                ...(emp.warningItems || [])
+                            ];
+                            
+                            // If they have critical items (expire within 30 days) and we're within 30 days of quarter end
+                            const daysToQuarterEnd = Math.ceil((quarterEndDate - new Date()) / (1000 * 60 * 60 * 24));
+                            
+                            const hasItemsExpiringBeforeQuarterEnd = allItems.some(item => {
+                                return item.daysUntilExpiry <= daysToQuarterEnd;
+                            });
+                            
+                            if (hasItemsExpiringBeforeQuarterEnd) {
+                                projectedCompliantEmployees--;
+                            }
+                        }
+                    });
+                    
+                    const projectedPercentage = Math.round((projectedCompliantEmployees / employees.length) * 100);
+                    
+                    const getStatusLevel = (percentage) => {
+                        if (percentage >= 95) return { level: 'good', message: 'Excellent Compliance!' };
+                        if (percentage >= 90) return { level: 'good', message: 'Good Progress! Keep pushing for 100%' };
+                        if (percentage >= 80) return { level: 'warning', message: 'Getting Sketchy! Time to step it up' };
+                        return { level: 'danger', message: 'Completely Unacceptable! All hands on deck NOW!' };
+                    };
+                    
+                    const currentStatus = getStatusLevel(currentPercentage);
+                    const projectedStatus = getStatusLevel(projectedPercentage);
+                    
+                    return {
+                        current: { 
+                            percentage: currentPercentage, 
+                            level: currentStatus.level, 
+                            message: currentStatus.message 
+                        },
+                        projected: { 
+                            percentage: projectedPercentage, 
+                            level: projectedStatus.level, 
+                            message: projectedStatus.message 
+                        }
+                    };
                 };
 
                 const goodEmployees = employees.filter(emp => emp.status === 'good');
@@ -575,8 +658,8 @@
                     
                     React.createElement('div', { 
                         className: 'rounded-2xl p-4 mx-4 border-2 ' + (
-                            compliance.level === 'good' ? 'bg-green-100 border-green-500' : 
-                            compliance.level === 'warning' ? 'bg-yellow-100 border-yellow-500' : 
+                            compliance.projected.level === 'good' ? 'bg-green-100 border-green-500' : 
+                            compliance.projected.level === 'warning' ? 'bg-yellow-100 border-yellow-500' : 
                             'bg-red-100 border-red-500'
                         )
                     },
@@ -587,8 +670,19 @@
                             React.createElement('div', { className: 'text-xl font-bold mb-1 text-gray-900' }, 
                                 'MUST BE 100% COMPLIANT'
                             ),
-                            React.createElement('div', { className: 'text-lg font-semibold text-gray-900' }, 
-                                'Current Status: ' + compliance.percentage + '% - ' + compliance.message
+                            React.createElement('div', { className: 'text-lg font-semibold text-gray-900 mb-2' }, 
+                                'Current: ' + compliance.current.percentage + '% → Projected Q' + 
+                                (quarterData.quarterName.replace('Q', '')) + ' End: ' + compliance.projected.percentage + '%'
+                            ),
+                            React.createElement('div', { 
+                                className: 'text-sm font-medium ' + (
+                                    compliance.projected.level === 'good' ? 'text-green-700' : 
+                                    compliance.projected.level === 'warning' ? 'text-yellow-700' : 
+                                    'text-red-700'
+                                )
+                            }, 
+                                compliance.projected.message + (compliance.current.percentage !== compliance.projected.percentage ? 
+                                    ' (Assuming expiring certifications not renewed)' : '')
                             )
                         )
                     ),
