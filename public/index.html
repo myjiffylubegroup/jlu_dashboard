@@ -365,28 +365,26 @@
                         projected: { percentage: 100, level: 'good', message: 'All Good!' }
                     };
                     
-                    // Current compliance - anyone who is 'good' status right now
-                    const currentCompliantEmployees = employees.filter(emp => emp.status === 'good').length;
-                    const currentPercentage = Math.round((currentCompliantEmployees / employees.length) * 100);
+                    // CURRENT: Use 100% as baseline (from franchise dashboard)
+                    const currentPercentage = 100;
                     
-                    // Project quarter end compliance (worst case - assume expiring certs don't renew)
+                    // PROJECTION: Conservative worst-case analysis
                     const quarterData = getQuarterEndDate();
                     const quarterEndDate = quarterData.quarterEnd;
+                    const daysToQuarterEnd = Math.ceil((quarterEndDate - new Date()) / (1000 * 60 * 60 * 24));
                     
-                    let projectedCompliantEmployees = 0;
+                    // Count employees who will be at risk by quarter end (conservative)
+                    let employeesAtRisk = 0;
                     
-                    // For each employee, determine if they'll still be compliant at quarter end
                     employees.forEach(emp => {
-                        let willBeCompliant = true;
+                        let hasRisk = false;
                         
-                        // If they're currently expired or critical, they won't be compliant
+                        // Already expired or critical = definitely at risk
                         if (emp.status === 'expired' || emp.status === 'critical') {
-                            willBeCompliant = false;
+                            hasRisk = true;
                         }
-                        // If they have items that expire before quarter end, they won't be compliant
-                        else if (emp.status === 'good' || emp.status === 'warning') {
-                            const daysToQuarterEnd = Math.ceil((quarterEndDate - new Date()) / (1000 * 60 * 60 * 24));
-                            
+                        // Has items expiring before quarter end = potentially at risk
+                        else {
                             const allItems = [
                                 ...(emp.expiredItems || []),
                                 ...(emp.criticalItems || []),
@@ -398,34 +396,43 @@
                             });
                             
                             if (hasItemsExpiringBeforeQuarterEnd) {
-                                willBeCompliant = false;
+                                hasRisk = true;
                             }
                         }
                         
-                        if (willBeCompliant) {
-                            projectedCompliantEmployees++;
+                        if (hasRisk) {
+                            employeesAtRisk++;
                         }
                     });
                     
-                    const projectedPercentage = Math.round((projectedCompliantEmployees / employees.length) * 100);
+                    // Conservative projection: assume each at-risk employee could impact compliance
+                    // This is intentionally pessimistic to avoid false confidence
+                    const riskImpactPercentage = employees.length > 0 ? Math.round((employeesAtRisk / employees.length) * 100) : 0;
+                    const projectedPercentage = Math.max(0, currentPercentage - riskImpactPercentage);
                     
                     const getCurrentStatusLevel = (percentage) => {
+                        if (percentage >= 100) return { level: 'good', message: 'Perfect compliance! 🎉' };
                         if (percentage >= 95) return { level: 'good', message: 'Excellent! Keep up the great work!' };
                         if (percentage >= 90) return { level: 'good', message: 'Great progress! Almost there!' };
                         if (percentage >= 80) return { level: 'warning', message: 'Good effort! Time to close the gap!' };
                         return { level: 'danger', message: 'Let\'s get everyone certified!' };
                     };
                     
-                    const getProjectedMessage = (currentPct, projectedPct) => {
-                        if (projectedPct >= 95) return 'You\'re all set for quarter end! 🎉';
-                        if (projectedPct >= 90) return 'A few renewals needed to stay strong! 💪';
-                        if (projectedPct >= 80) return 'Time to focus on upcoming renewals! ⏰';
-                        if (currentPct === 100) return 'Great current status! Let\'s keep it that way through quarter end! 🎯';
-                        return 'Let\'s get everyone renewed and ready! 🚀';
+                    const getProjectedMessage = (currentPct, projectedPct, atRiskCount) => {
+                        if (atRiskCount === 0) {
+                            return 'All certifications current through quarter end! 🎉';
+                        }
+                        if (projectedPct >= 90) {
+                            return atRiskCount + ' employee(s) need renewals - stay vigilant! ⚠️';
+                        }
+                        if (projectedPct >= 80) {
+                            return atRiskCount + ' employee(s) at risk - time to take action! ⏰';
+                        }
+                        return atRiskCount + ' employee(s) at risk - immediate attention needed! 🚨';
                     };
                     
                     const currentStatus = getCurrentStatusLevel(currentPercentage);
-                    const projectedMessage = getProjectedMessage(currentPercentage, projectedPercentage);
+                    const projectedMessage = getProjectedMessage(currentPercentage, projectedPercentage, employeesAtRisk);
                     
                     return {
                         current: { 
@@ -435,7 +442,7 @@
                         },
                         projected: { 
                             percentage: projectedPercentage, 
-                            level: currentStatus.level, // Use current level for shading!
+                            level: currentStatus.level, // Keep current level for shading (celebrate current success)
                             message: projectedMessage 
                         }
                     };
