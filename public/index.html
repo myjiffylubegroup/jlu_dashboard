@@ -365,7 +365,7 @@
                         projected: { percentage: 100, level: 'good', message: 'All Good!' }
                     };
                     
-                    // Current compliance
+                    // Current compliance - anyone who is 'good' status right now
                     const currentCompliantEmployees = employees.filter(emp => emp.status === 'good').length;
                     const currentPercentage = Math.round((currentCompliantEmployees / employees.length) * 100);
                     
@@ -373,41 +373,59 @@
                     const quarterData = getQuarterEndDate();
                     const quarterEndDate = quarterData.quarterEnd;
                     
-                    let projectedCompliantEmployees = currentCompliantEmployees;
+                    let projectedCompliantEmployees = 0;
                     
-                    // For each employee with warnings or critical issues, check if they'll be non-compliant by quarter end
+                    // For each employee, determine if they'll still be compliant at quarter end
                     employees.forEach(emp => {
-                        if (emp.status === 'good') {
-                            // Check if any of their certifications expire before quarter end
+                        let willBeCompliant = true;
+                        
+                        // If they're currently expired or critical, they won't be compliant
+                        if (emp.status === 'expired' || emp.status === 'critical') {
+                            willBeCompliant = false;
+                        }
+                        // If they have items that expire before quarter end, they won't be compliant
+                        else if (emp.status === 'good' || emp.status === 'warning') {
+                            const daysToQuarterEnd = Math.ceil((quarterEndDate - new Date()) / (1000 * 60 * 60 * 24));
+                            
                             const allItems = [
+                                ...(emp.expiredItems || []),
                                 ...(emp.criticalItems || []),
                                 ...(emp.warningItems || [])
                             ];
-                            
-                            // If they have critical items (expire within 30 days) and we're within 30 days of quarter end
-                            const daysToQuarterEnd = Math.ceil((quarterEndDate - new Date()) / (1000 * 60 * 60 * 24));
                             
                             const hasItemsExpiringBeforeQuarterEnd = allItems.some(item => {
                                 return item.daysUntilExpiry <= daysToQuarterEnd;
                             });
                             
                             if (hasItemsExpiringBeforeQuarterEnd) {
-                                projectedCompliantEmployees--;
+                                willBeCompliant = false;
                             }
+                        }
+                        
+                        if (willBeCompliant) {
+                            projectedCompliantEmployees++;
                         }
                     });
                     
                     const projectedPercentage = Math.round((projectedCompliantEmployees / employees.length) * 100);
                     
-                    const getStatusLevel = (percentage) => {
-                        if (percentage >= 95) return { level: 'good', message: 'Excellent Compliance!' };
-                        if (percentage >= 90) return { level: 'good', message: 'Good Progress! Keep pushing for 100%' };
-                        if (percentage >= 80) return { level: 'warning', message: 'Getting Sketchy! Time to step it up' };
-                        return { level: 'danger', message: 'Completely Unacceptable! All hands on deck NOW!' };
+                    const getCurrentStatusLevel = (percentage) => {
+                        if (percentage >= 95) return { level: 'good', message: 'Excellent! Keep up the great work!' };
+                        if (percentage >= 90) return { level: 'good', message: 'Great progress! Almost there!' };
+                        if (percentage >= 80) return { level: 'warning', message: 'Good effort! Time to close the gap!' };
+                        return { level: 'danger', message: 'Let\'s get everyone certified!' };
                     };
                     
-                    const currentStatus = getStatusLevel(currentPercentage);
-                    const projectedStatus = getStatusLevel(projectedPercentage);
+                    const getProjectedMessage = (currentPct, projectedPct) => {
+                        if (projectedPct >= 95) return 'You\'re all set for quarter end! 🎉';
+                        if (projectedPct >= 90) return 'A few renewals needed to stay strong! 💪';
+                        if (projectedPct >= 80) return 'Time to focus on upcoming renewals! ⏰';
+                        if (currentPct === 100) return 'Great current status! Let\'s keep it that way through quarter end! 🎯';
+                        return 'Let\'s get everyone renewed and ready! 🚀';
+                    };
+                    
+                    const currentStatus = getCurrentStatusLevel(currentPercentage);
+                    const projectedMessage = getProjectedMessage(currentPercentage, projectedPercentage);
                     
                     return {
                         current: { 
@@ -417,8 +435,8 @@
                         },
                         projected: { 
                             percentage: projectedPercentage, 
-                            level: projectedStatus.level, 
-                            message: projectedStatus.message 
+                            level: currentStatus.level, // Use current level for shading!
+                            message: projectedMessage 
                         }
                     };
                 };
@@ -658,8 +676,8 @@
                     
                     React.createElement('div', { 
                         className: 'rounded-2xl p-4 mx-4 border-2 ' + (
-                            compliance.projected.level === 'good' ? 'bg-green-100 border-green-500' : 
-                            compliance.projected.level === 'warning' ? 'bg-yellow-100 border-yellow-500' : 
+                            compliance.current.level === 'good' ? 'bg-green-100 border-green-500' : 
+                            compliance.current.level === 'warning' ? 'bg-yellow-100 border-yellow-500' : 
                             'bg-red-100 border-red-500'
                         )
                     },
@@ -671,18 +689,19 @@
                                 'MUST BE 100% COMPLIANT'
                             ),
                             React.createElement('div', { className: 'text-lg font-semibold text-gray-900 mb-2' }, 
-                                'Current: ' + compliance.current.percentage + '% → Projected Q' + 
-                                (quarterData.quarterName.replace('Q', '')) + ' End: ' + compliance.projected.percentage + '%'
+                                'Current: ' + compliance.current.percentage + '%' + 
+                                (compliance.current.percentage !== compliance.projected.percentage ? 
+                                    ' → Projected Q' + (quarterData.quarterName.replace('Q', '')) + ' End: ' + compliance.projected.percentage + '%' : 
+                                    ' - All set for quarter end!')
                             ),
                             React.createElement('div', { 
                                 className: 'text-sm font-medium ' + (
-                                    compliance.projected.level === 'good' ? 'text-green-700' : 
-                                    compliance.projected.level === 'warning' ? 'text-yellow-700' : 
+                                    compliance.current.level === 'good' ? 'text-green-700' : 
+                                    compliance.current.level === 'warning' ? 'text-yellow-700' : 
                                     'text-red-700'
                                 )
                             }, 
-                                compliance.projected.message + (compliance.current.percentage !== compliance.projected.percentage ? 
-                                    ' (Assuming expiring certifications not renewed)' : '')
+                                compliance.projected.message
                             )
                         )
                     ),
