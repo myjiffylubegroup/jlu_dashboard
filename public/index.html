@@ -489,10 +489,9 @@
                                                         key: index, 
                                                         className: 'bg-red-100 rounded-lg p-3 border border-red-300'
                                                     },
-                                                        React.createElement('div', { className: 'font-bold text-red-800' }, item.employeeName),
-                                                        React.createElement('div', { className: 'text-red-700' }, item.category),
-                                                        React.createElement('div', { className: 'text-red-600 font-semibold text-sm' }, 
-                                                            'EXPIRED' + (item.daysPastDue ? ' ' + item.daysPastDue + ' days ago' : '') +
+                                                        React.createElement('div', { className: 'font-bold text-red-800 text-sm' }, 
+                                                            item.employeeName + ' - ' + item.category + ' - EXPIRED' + 
+                                                            (item.daysPastDue ? ' ' + item.daysPastDue + ' days ago' : '') +
                                                             (item.moduleCount > 1 ? ' (' + item.moduleCount + ' modules)' : '')
                                                         )
                                                     )
@@ -523,9 +522,8 @@
                                                         key: index, 
                                                         className: 'bg-orange-100 rounded-lg p-3 border border-orange-300'
                                                     },
-                                                        React.createElement('div', { className: 'font-bold text-orange-800' }, item.employeeName),
-                                                        React.createElement('div', { className: 'text-orange-700' }, item.category),
-                                                        React.createElement('div', { className: 'text-orange-600 font-semibold text-sm' }, 
+                                                        React.createElement('div', { className: 'font-bold text-orange-800 text-sm' }, 
+                                                            item.employeeName + ' - ' + item.category + ' - ' +
                                                             item.daysUntilExpiry + ' days left' +
                                                             (item.moduleCount > 1 ? ' (' + item.moduleCount + ' modules)' : '')
                                                         )
@@ -557,9 +555,8 @@
                                                         key: index, 
                                                         className: 'bg-yellow-100 rounded-lg p-3 border border-yellow-300'
                                                     },
-                                                        React.createElement('div', { className: 'font-bold text-yellow-800' }, item.employeeName),
-                                                        React.createElement('div', { className: 'text-yellow-700' }, item.category),
-                                                        React.createElement('div', { className: 'text-yellow-600 font-semibold text-sm' }, 
+                                                        React.createElement('div', { className: 'font-bold text-yellow-800 text-sm' }, 
+                                                            item.employeeName + ' - ' + item.category + ' - ' +
                                                             item.daysUntilExpiry + ' days left' +
                                                             (item.moduleCount > 1 ? ' (' + item.moduleCount + ' modules)' : '')
                                                         )
