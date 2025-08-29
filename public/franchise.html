@@ -339,8 +339,12 @@
                             
                             React.createElement('div', { className: 'bg-white rounded-xl p-6 shadow-lg border-l-4 border-green-500' },
                                 React.createElement('div', { className: 'text-3xl font-bold text-green-600 mb-1' }, compliantStores + ' of 8'),
-                                React.createElement('div', { className: 'text-gray-600 font-medium' }, 'Stores Compliant'),
-                                React.createElement('div', { className: 'text-sm text-gray-500 mt-1' }, warningStores + ' warning, ' + criticalStores + ' critical')
+                                React.createElement('div', { className: 'text-gray-600 font-medium' }, 'Projected Quarter End'),
+                                React.createElement('div', { className: 'text-sm text-gray-500 mt-1' }, 
+                                    warningStores > 0 || criticalStores > 0 ? 
+                                        warningStores + ' at risk, ' + criticalStores + ' critical' :
+                                        'All stores maintaining compliance'
+                                )
                             ),
                             
                             React.createElement('div', { className: 'bg-white rounded-xl p-6 shadow-lg border-l-4 border-red-500' },
