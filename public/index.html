@@ -206,18 +206,23 @@
                                     }
                                 }
                                 
-                                const groupedIssues = {};
+                                // Group issues by status only (not category)
+                                const statusCounts = { expired: 0, critical: 0, warning: 0 };
                                 certificationIssues.forEach(issue => {
-                                    const key = issue.category + '_' + issue.status;
-                                    if (!groupedIssues[key]) {
-                                        groupedIssues[key] = {
-                                            category: issue.category,
-                                            status: issue.status,
-                                            moduleCount: 0
-                                        };
-                                    }
-                                    groupedIssues[key].moduleCount++;
+                                    statusCounts[issue.status]++;
                                 });
+                                
+                                // Create summary array with just status totals
+                                const summaryArray = [];
+                                if (statusCounts.expired > 0) {
+                                    summaryArray.push({ status: 'expired', moduleCount: statusCounts.expired });
+                                }
+                                if (statusCounts.critical > 0) {
+                                    summaryArray.push({ status: 'critical', moduleCount: statusCounts.critical });
+                                }
+                                if (statusCounts.warning > 0) {
+                                    summaryArray.push({ status: 'warning', moduleCount: statusCounts.warning });
+                                }
                                 
                                 let overallStatus = 'good';
                                 if (certificationIssues.some(issue => issue.status === 'expired')) {
@@ -240,7 +245,7 @@
                                     hireDate: hireDate,
                                     status: overallStatus,
                                     totalCompleted: totalCompleted,
-                                    certificationSummary: Object.values(groupedIssues).slice(0, 4)
+                                    certificationSummary: summaryArray
                                 });
                             });
                         }
@@ -403,11 +408,9 @@
                                                                         className: 'flex justify-between items-center p-3 rounded bg-black/20'
                                                                     },
                                                                         React.createElement('span', { className: 'font-semibold text-white' }, 
-                                                                            issue.status.charAt(0).toUpperCase() + issue.status.slice(1) + ': ' + issue.category
+                                                                            issue.moduleCount + ' Modules ' + issue.status.charAt(0).toUpperCase() + issue.status.slice(1)
                                                                         ),
-                                                                        React.createElement('span', { className: 'text-white font-bold' }, 
-                                                                            issue.moduleCount + ' module' + (issue.moduleCount !== 1 ? 's' : '')
-                                                                        )
+                                                                        React.createElement('span', { className: 'text-white font-bold' }, '')
                                                                     )
                                                                 ) :
                                                                 React.createElement('div', { className: 'p-3 rounded bg-black/20' },
@@ -455,11 +458,9 @@
                                                                         className: 'flex justify-between items-center p-3 rounded bg-black/20'
                                                                     },
                                                                         React.createElement('span', { className: 'font-semibold text-white' }, 
-                                                                            'Warning: ' + issue.category
+                                                                            issue.moduleCount + ' Modules Warning'
                                                                         ),
-                                                                        React.createElement('span', { className: 'text-white font-bold' }, 
-                                                                            issue.moduleCount + ' module' + (issue.moduleCount !== 1 ? 's' : '')
-                                                                        )
+                                                                        React.createElement('span', { className: 'text-white font-bold' }, '')
                                                                     )
                                                                 ) :
                                                                 React.createElement('div', { className: 'p-3 rounded bg-black/20' },
