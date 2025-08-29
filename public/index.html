@@ -12,11 +12,6 @@
             0% { transform: translateX(100%); }
             100% { transform: translateX(-100%); }
         }
-        @keyframes verticalScroll {
-            0% { transform: translateY(0); }
-            50% { transform: translateY(-50%); }
-            100% { transform: translateY(0); }
-        }
         .ticker-content {
             animation: tickerScroll 60s linear infinite;
             white-space: nowrap;
@@ -26,24 +21,6 @@
             background: linear-gradient(90deg, rgba(34,197,94,0.2) 0%, rgba(34,197,94,0.6) 50%, rgba(34,197,94,0.2) 100%);
             box-shadow: 0 0 20px rgba(34,197,94,0.3);
         }
-        .scroll-container {
-            max-height: 400px;
-            overflow: hidden;
-        }
-        .scroll-content {
-            animation: verticalScroll 45s ease-in-out infinite;
-        }
-        .scroll-content:hover {
-            animation-play-state: paused;
-        }
-        .countdown-section {
-            background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
-            border: 3px solid;
-            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
-        }
-        .countdown-good { border-color: #10b981; background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); }
-        .countdown-warning { border-color: #f59e0b; background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); }
-        .countdown-danger { border-color: #ef4444; background: linear-gradient(135deg, #fef2f2 0%, #fecaca 100%); }
     </style>
 </head>
 <body class="bg-white">
@@ -58,7 +35,6 @@
                 const [storeInfo, setStoreInfo] = useState({});
                 const [loading, setLoading] = useState(true);
                 const [error, setError] = useState(null);
-                const [tickerEmployees, setTickerEmployees] = useState([]);
                 
                 const urlParams = new URLSearchParams(window.location.search);
                 const currentStore = urlParams.get('store') || '609';
@@ -69,562 +45,20 @@
                 }, []);
                 
                 useEffect(() => {
-                    loadStoreExcelData(currentStore);
+                    // For now, just set dummy data to test the basic structure
+                    setEmployees([
+                        { name: 'Test User', status: 'good', totalCompleted: 45, displayName: 'Test U.' }
+                    ]);
+                    setStoreInfo({ storeNumber: currentStore, totalEmployees: 1 });
+                    setLoading(false);
                 }, [currentStore]);
-
-                // Randomize ticker order every 30 seconds
-                useEffect(() => {
-                    const goodEmployees = employees.filter(emp => emp.status === 'good');
-                    const shuffled = [...goodEmployees].sort(() => Math.random() - 0.5);
-                    setTickerEmployees(shuffled);
-
-                    const interval = setInterval(() => {
-                        const reshuffled = [...goodEmployees].sort(() => Math.random() - 0.5);
-                        setTickerEmployees(reshuffled);
-                    }, 30000); // Reshuffle every 30 seconds
-
-                    return () => clearInterval(interval);
-                }, [employees]);
-                
-                const getQuarterEndDate = () => {
-                    const now = new Date();
-                    const year = now.getFullYear();
-                    const month = now.getMonth();
-                    
-                    let quarterEnd;
-                    let quarterName;
-                    
-                    if (month < 3) { // Jan-Mar
-                        quarterEnd = new Date(year, 2, 31); // March 31
-                        quarterName = "Q1";
-                    } else if (month < 6) { // Apr-Jun
-                        quarterEnd = new Date(year, 5, 30); // June 30
-                        quarterName = "Q2";
-                    } else if (month < 9) { // Jul-Sep
-                        quarterEnd = new Date(year, 8, 30); // September 30
-                        quarterName = "Q3";
-                    } else { // Oct-Dec
-                        quarterEnd = new Date(year, 11, 31); // December 31
-                        quarterName = "Q4";
-                    }
-                    
-                    return { quarterEnd, quarterName };
-                };
-
-                const getComplianceStatus = () => {
-                    if (employees.length === 0) return { percentage: 100, level: 'good', message: '🌟 Almost Perfect! Watch those expiring modules' };
-                    
-                    const compliantEmployees = employees.filter(emp => emp.status === 'good').length;
-                    const percentage = Math.round((compliantEmployees / employees.length) * 100);
-                    
-                    let level, message;
-                    if (percentage >= 95) {
-                        level = 'good';
-                        message = '🌟 Almost Perfect! Watch those expiring modules';
-                    } else if (percentage >= 90) {
-                        level = 'good';
-                        message = '💪 Good Progress! Keep pushing for 100%';
-                    } else if (percentage >= 80) {
-                        level = 'warning';
-                        message = '⚠️ Getting Sketchy! Time to step it up';
-                    } else {
-                        level = 'danger';
-                        message = '🚨 Completely Unacceptable! All hands on deck NOW!';
-                    }
-                    
-                    return { percentage, level, message };
-                };
-                    const parts = fullName.split(', ');
-                    if (parts.length === 2) {
-                        const lastName = parts[0];
-                        const firstName = parts[1];
-                        return `${firstName} ${lastName.charAt(0)}.`;
-                    }
-                    return fullName;
-                };
-
-                const calculateDaysUntilExpiry = (expirationDate) => {
-                    if (!expirationDate || expirationDate === '' || expirationDate === 'N/A') return null;
-                    
-                    let dateStr = expirationDate;
-                    if (typeof dateStr === 'string' && dateStr.includes(' 00:00:00')) {
-                        dateStr = dateStr.replace(' 00:00:00', '');
-                    }
-                    
-                    const expDate = new Date(dateStr);
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0);
-                    expDate.setHours(0, 0, 0, 0);
-                    
-                    if (isNaN(expDate.getTime())) return null;
-                    
-                    const diffTime = expDate - today;
-                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                    return diffDays;
-                };
-
-                const parseEmployeeHireInfo = (hireString) => {
-                    if (!hireString || typeof hireString !== 'string') return null;
-                    
-                    const match = hireString.match(/(\d+)\s*-\s*(\d{2}\/\d{2}\/\d{4})/);
-                    if (!match) return null;
-                    
-                    const [, employeeId, hireDateStr] = match;
-                    const hireDate = new Date(hireDateStr);
-                    const isManager = hireString.includes('(M)');
-                    
-                    return {
-                        employeeId,
-                        hireDate,
-                        isManager,
-                        hireDateStr
-                    };
-                };
-
-                const getRequiredCertificationsByTenure = (hireDate, isManager) => {
-                    const today = new Date();
-                    const daysEmployed = Math.floor((today - hireDate) / (1000 * 60 * 60 * 24));
-                    
-                    const required = [];
-                    
-                    // Safety & Orientation - CRITICAL at 30 days
-                    if (daysEmployed >= 0) {
-                        required.push({
-                            category: 'Safety & Orientation',
-                            dueByDays: 30,
-                            priority: 'critical',
-                            description: 'Foundation safety training - required for all positions'
-                        });
-                        required.push({
-                            category: 'HSSE',
-                            dueByDays: 30,
-                            priority: 'critical',
-                            description: 'Health, Safety, Security, Environment training'
-                        });
-                    }
-                    
-                    // 1st Position - CRITICAL at 45 days
-                    if (daysEmployed >= 30) {
-                        required.push({
-                            category: 'Courtesy Technician',
-                            dueByDays: 45,
-                            priority: 'critical',
-                            description: '1st Position certification'
-                        });
-                    }
-                    
-                    // 2nd Position - WARNING at 60 days
-                    if (daysEmployed >= 45) {
-                        required.push({
-                            category: 'Lower Bay Technician',
-                            dueByDays: 60,
-                            priority: 'warning',
-                            description: '2nd Position certification'
-                        });
-                    }
-                    
-                    // 3rd Position - WARNING at 90 days
-                    if (daysEmployed >= 60) {
-                        required.push({
-                            category: 'Upper Bay Technician',
-                            dueByDays: 90,
-                            priority: 'warning',
-                            description: '3rd Position certification'
-                        });
-                    }
-                    
-                    // Service Specialist - NORMAL at 180 days
-                    if (daysEmployed >= 90) {
-                        required.push({
-                            category: 'Service Specialist',
-                            dueByDays: 180,
-                            priority: 'normal',
-                            description: 'Advanced service capabilities'
-                        });
-                    }
-                    
-                    // Management requirements
-                    if (isManager) {
-                        required.push({
-                            category: 'Management Training',
-                            dueByDays: 180,
-                            priority: 'critical',
-                            description: 'Management-specific training modules'
-                        });
-                        required.push({
-                            category: 'Leadership',
-                            dueByDays: 365,
-                            priority: 'warning',
-                            description: 'Leadership development program'
-                        });
-                    }
-                    
-                    return required;
-                };
-
-                const categorizeCourse = (courseName) => {
-                    if (courseName.includes('JTSS+ Orientation') || courseName.includes('Jiffy Lube and You') || 
-                        courseName.includes('Customer Safety') || courseName.includes('Jteam Safety') || 
-                        courseName.includes('Customer Experience')) return 'Safety & Orientation';
-                    if (courseName.includes('JTSS+ Courtesy')) return 'Courtesy Technician';
-                    if (courseName.includes('JTSS+ Lower Bay')) return 'Lower Bay Technician';
-                    if (courseName.includes('JTSS+ Upper Bay')) return 'Upper Bay Technician';
-                    if (courseName.includes('JTSS+ Customer Service')) return 'Customer Service Advisor';
-                    if (courseName.includes('JTSS+ Service Technician')) return 'Service Technician';
-                    if (courseName.includes('Service Specialist') || courseName.includes('Air Conditioning') || 
-                        courseName.includes('Transmission') || courseName.includes('Engine Cooling') ||
-                        courseName.includes('Fuel Filter') || courseName.includes('Tire Rotation') ||
-                        courseName.includes('Air Filtration') || courseName.includes('Wiper') ||
-                        courseName.includes('Light Bulb') || courseName.includes('Cabin Air') ||
-                        courseName.includes('Serpentine Belt') || courseName.includes('Power Steering') ||
-                        courseName.includes('Battery') || courseName.includes('Nitrogen')) {
-                        return 'Service Specialist';
-                    }
-                    if (courseName.includes('Advanced Specialist')) return 'Advanced Specialist';
-                    if (courseName.includes('HSSE')) return 'HSSE';
-                    if (courseName.includes('Management Training')) return 'Management Training';
-                    if (courseName.includes('Leadership')) return 'Leadership';
-                    if (courseName.includes('California BAR')) return 'California BAR';
-                    if (courseName.includes('JLI Fleet') || courseName.includes('JLI Marketing')) return 'JLI Fleet/Marketing';
-                    return 'Other';
-                };
-
-                const getCertificationPriority = (category) => {
-                    const priorities = {
-                        'Safety & Orientation': 1,
-                        'HSSE': 2,
-                        'Courtesy Technician': 3,
-                        'Lower Bay Technician': 4,
-                        'Upper Bay Technician': 5,
-                        'Customer Service Advisor': 6,
-                        'Service Technician': 7,
-                        'Service Specialist': 8,
-                        'Management Training': 9,
-                        'Leadership': 10,
-                        'Advanced Specialist': 11,
-                        'California BAR': 12,
-                        'JLI Fleet/Marketing': 13,
-                        'Other': 14
-                    };
-                    return priorities[category] || 15;
-                };
-
-                const getEmployeeCertificationSummary = (employee) => {
-                    const issues = [];
-                    
-                    // Add missing required certifications
-                    employee.missingRequired?.forEach(missing => {
-                        if (missing.daysPastDue > 0) {
-                            issues.push({
-                                status: 'expired',
-                                category: missing.category,
-                                moduleCount: 1,
-                                priority: getCertificationPriority(missing.category),
-                                note: `${missing.daysPastDue} days overdue`
-                            });
-                        } else if (missing.daysUntilDue <= 7) {
-                            issues.push({
-                                status: 'critical',
-                                category: missing.category,
-                                moduleCount: 1,
-                                priority: getCertificationPriority(missing.category),
-                                note: `Due in ${missing.daysUntilDue} days`
-                            });
-                        }
-                    });
-
-                    // Group existing certifications by status
-                    employee.certifications?.forEach(cert => {
-                        if (cert.expiredModules > 0) {
-                            issues.push({
-                                status: 'expired',
-                                category: cert.name,
-                                moduleCount: cert.expiredModules,
-                                priority: getCertificationPriority(cert.name)
-                            });
-                        }
-                        if (cert.criticalModules > 0) {
-                            issues.push({
-                                status: 'critical',
-                                category: cert.name,
-                                moduleCount: cert.criticalModules,
-                                priority: getCertificationPriority(cert.name)
-                            });
-                        }
-                        if (cert.warningModules > 0) {
-                            issues.push({
-                                status: 'warning',
-                                category: cert.name,
-                                moduleCount: cert.warningModules,
-                                priority: getCertificationPriority(cert.name)
-                            });
-                        }
-                    });
-
-                    // Sort by priority (most important first)
-                    return issues.sort((a, b) => a.priority - b.priority);
-                };
-                
-                const loadStoreExcelData = async (storeNumber) => {
-                    try {
-                        setLoading(true);
-                        setError(null);
-                        
-                        const today = new Date().toISOString().split('T')[0];
-                        const filename = `MDCReport_Store${storeNumber}_${today}.xlsx`;
-                        
-                        const response = await fetch(`/data/${filename}`);
-                        if (!response.ok) {
-                            throw new Error(`Could not load ${filename}: ${response.status}`);
-                        }
-                        
-                        const arrayBuffer = await response.arrayBuffer();
-                        const workbook = XLSX.read(arrayBuffer);
-                        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-                        const rawData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
-                        
-                        console.log('Raw data rows:', rawData.length);
-                        
-                        const processedEmployees = [];
-                        
-                        if (rawData.length > 3) {
-                            const employeeRow = rawData[0] || [];
-                            const hireInfoRow = rawData[1] || [];
-                            const employees = [];
-                            
-                            for (let i = 1; i < employeeRow.length; i += 3) {
-                                const empName = employeeRow[i];
-                                const hireInfo = hireInfoRow[i];
-                                
-                                if (empName && typeof empName === 'string' && empName.trim() !== '') {
-                                    const parsedHireInfo = parseEmployeeHireInfo(hireInfo);
-                                    
-                                    employees.push({
-                                        name: empName,
-                                        hireInfo: parsedHireInfo,
-                                        statusCol: i,
-                                        completionCol: i + 1,
-                                        expirationCol: i + 2
-                                    });
-                                }
-                            }
-                            
-                            console.log('Found employees:', employees.map(e => ({ name: e.name, hire: e.hireInfo?.hireDateStr })));
-                            
-                            employees.forEach(employee => {
-                                const certifications = {};
-                                const individualModules = [];
-                                const missingRequiredCerts = [];
-                                
-                                let requiredCerts = [];
-                                if (employee.hireInfo?.hireDate) {
-                                    requiredCerts = getRequiredCertificationsByTenure(
-                                        employee.hireInfo.hireDate, 
-                                        employee.hireInfo.isManager
-                                    ),
-                        
-                        // Quarter-End Countdown Section
-                        React.createElement('div', { className: `countdown-section countdown-${compliance.level} rounded-2xl p-6 mx-4` },
-                            React.createElement('div', { className: 'text-center' },
-                                React.createElement('div', { className: 'text-4xl font-bold mb-2 text-gray-900' }, 
-                                    `📅 ${quarterName} ENDS IN: ${daysLeft} DAYS, ${hoursLeft} HOURS`
-                                ),
-                                React.createElement('div', { className: 'text-2xl font-bold mb-2 text-gray-900' }, 
-                                    '🎯 MUST BE 100% COMPLIANT'
-                                ),
-                                React.createElement('div', { className: 'text-xl font-semibold text-gray-900' }, 
-                                    `Current Status: ${compliance.percentage}% - ${compliance.message}`
-                                )
-                            )
-                        );
-                                }
-                                
-                                for (let rowIndex = 3; rowIndex < rawData.length; rowIndex++) {
-                                    const row = rawData[rowIndex];
-                                    const courseName = row[0];
-                                    
-                                    if (!courseName || typeof courseName !== 'string') continue;
-                                    
-                                    const status = row[employee.statusCol];
-                                    const completionDate = row[employee.completionCol];
-                                    const expirationDate = row[employee.expirationCol];
-                                    
-                                    if (status || completionDate || expirationDate) {
-                                        const daysUntilExpiry = calculateDaysUntilExpiry(expirationDate);
-                                        const category = categorizeCourse(courseName);
-                                        
-                                        const moduleData = {
-                                            courseName,
-                                            category,
-                                            status,
-                                            completionDate,
-                                            expirationDate,
-                                            daysUntilExpiry
-                                        };
-                                        
-                                        individualModules.push(moduleData);
-                                        
-                                        if (!certifications[category]) {
-                                            certifications[category] = {
-                                                name: category,
-                                                modules: [],
-                                                status: 'good',
-                                                minDaysToExpiry: Infinity,
-                                                expiredModules: 0,
-                                                criticalModules: 0,
-                                                warningModules: 0,
-                                                hasAnyCompleted: false
-                                            };
-                                        }
-                                        
-                                        certifications[category].modules.push(moduleData);
-                                        
-                                        if (status === 'C' || completionDate) {
-                                            certifications[category].hasAnyCompleted = true;
-                                        }
-                                        
-                                        if (daysUntilExpiry !== null) {
-                                            if (daysUntilExpiry < 0) {
-                                                certifications[category].expiredModules++;
-                                                certifications[category].status = 'expired';
-                                            } else if (daysUntilExpiry <= 30) {
-                                                certifications[category].criticalModules++;
-                                                if (certifications[category].status !== 'expired') {
-                                                    certifications[category].status = 'critical';
-                                                }
-                                            } else if (daysUntilExpiry <= 60) {
-                                                certifications[category].warningModules++;
-                                                if (certifications[category].status === 'good') {
-                                                    certifications[category].status = 'warning';
-                                                }
-                                            }
-                                            
-                                            certifications[category].minDaysToExpiry = Math.min(
-                                                certifications[category].minDaysToExpiry, 
-                                                daysUntilExpiry
-                                            );
-                                        }
-                                    }
-                                }
-                                
-                                // Check for missing required certifications
-                                if (employee.hireInfo?.hireDate) {
-                                    const today = new Date();
-                                    const daysEmployed = Math.floor((today - employee.hireInfo.hireDate) / (1000 * 60 * 60 * 24));
-                                    
-                                    requiredCerts.forEach(reqCert => {
-                                        const hasThisCert = certifications[reqCert.category]?.hasAnyCompleted;
-                                        const daysSinceRequired = daysEmployed - reqCert.dueByDays;
-                                        
-                                        if (!hasThisCert && daysSinceRequired >= -7) {
-                                            missingRequiredCerts.push({
-                                                ...reqCert,
-                                                daysPastDue: Math.max(0, daysSinceRequired),
-                                                daysUntilDue: Math.max(0, -daysSinceRequired)
-                                            });
-                                        }
-                                    });
-                                }
-                                
-                                let overallStatus = 'good';
-                                let minDaysToExpiry = Infinity;
-                                let totalExpired = 0;
-                                let totalCritical = 0;
-                                let totalWarning = 0;
-                                let totalCompleted = 0;
-                                
-                                // Count completed modules
-                                individualModules.forEach(module => {
-                                    if (module.status === 'C' || module.completionDate) {
-                                        totalCompleted++;
-                                    }
-                                });
-                                
-                                missingRequiredCerts.forEach(missing => {
-                                    if (missing.daysPastDue > 0) {
-                                        overallStatus = 'expired';
-                                    } else if (missing.daysUntilDue <= 7 && overallStatus !== 'expired') {
-                                        overallStatus = 'critical';
-                                    }
-                                });
-                                
-                                Object.values(certifications).forEach(cert => {
-                                    totalExpired += cert.expiredModules;
-                                    totalCritical += cert.criticalModules;
-                                    totalWarning += cert.warningModules;
-                                    
-                                    if (cert.minDaysToExpiry < minDaysToExpiry) {
-                                        minDaysToExpiry = cert.minDaysToExpiry;
-                                    }
-                                    
-                                    if (cert.status === 'expired') {
-                                        overallStatus = 'expired';
-                                    } else if (cert.status === 'critical' && overallStatus !== 'expired') {
-                                        overallStatus = 'critical';
-                                    } else if (cert.status === 'warning' && overallStatus === 'good') {
-                                        overallStatus = 'warning';
-                                    }
-                                });
-                                
-                                if (Object.keys(certifications).length > 0 || missingRequiredCerts.length > 0) {
-                                    processedEmployees.push({
-                                        name: employee.name,
-                                        displayName: formatEmployeeName(employee.name),
-                                        hireInfo: employee.hireInfo,
-                                        certifications: Object.values(certifications),
-                                        missingRequired: missingRequiredCerts,
-                                        totalModules: individualModules.length,
-                                        totalCompleted: totalCompleted,
-                                        expiredModules: totalExpired,
-                                        criticalModules: totalCritical,
-                                        warningModules: totalWarning,
-                                        daysUntilExpiry: minDaysToExpiry === Infinity ? null : minDaysToExpiry,
-                                        status: overallStatus,
-                                        certificationSummary: null // Will be populated below
-                                    });
-                                }
-                            });
-
-                            // Add certification summary to each employee
-                            processedEmployees.forEach(emp => {
-                                emp.certificationSummary = getEmployeeCertificationSummary(emp);
-                            });
-                        }
-                        
-                        console.log(`Processed ${processedEmployees.length} employees for store ${storeNumber}`);
-                        
-                        setEmployees(processedEmployees);
-                        setStoreInfo({
-                            storeNumber: storeNumber,
-                            totalEmployees: processedEmployees.length
-                        });
-                        
-                    } catch (err) {
-                        console.error('Error loading Excel data:', err);
-                        setError(`Failed to load data: ${err.message}`);
-                    } finally {
-                        setLoading(false);
-                    }
-                };
-                
-                const expiredEmployees = employees.filter(emp => emp.status === 'expired');
-                const criticalEmployees = employees.filter(emp => emp.status === 'critical');
-                const warningEmployees = employees.filter(emp => emp.status === 'warning'); 
-                const goodEmployees = employees.filter(emp => emp.status === 'good');
-                
-                const { quarterEnd, quarterName } = getQuarterEndDate();
-                const compliance = getComplianceStatus();
-                const now = new Date();
-                const timeToQuarterEnd = quarterEnd - now;
-                const daysLeft = Math.ceil(timeToQuarterEnd / (1000 * 60 * 60 * 24));
-                const hoursLeft = Math.floor((timeToQuarterEnd % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
                 
                 if (loading) {
                     return React.createElement('div', {
                         className: 'min-h-screen bg-white text-gray-800 flex items-center justify-center'
                     },
                         React.createElement('div', { className: 'text-center' },
-                            React.createElement('div', { className: 'text-3xl font-bold mb-4 text-red-600' }, `Loading Store ${currentStore}...`),
+                            React.createElement('div', { className: 'text-3xl font-bold mb-4 text-red-600' }, 'Loading Store ' + currentStore + '...'),
                             React.createElement('div', { className: 'text-gray-600' }, 'Processing certification data...')
                         )
                     );
@@ -637,9 +71,6 @@
                         React.createElement('div', { className: 'text-center max-w-lg' },
                             React.createElement('div', { className: 'text-2xl font-bold mb-4 text-red-600' }, 'Error Loading Data'),
                             React.createElement('div', { className: 'mb-4 text-sm bg-red-100 p-4 rounded border border-red-300 text-red-800' }, error),
-                            React.createElement('div', { className: 'text-sm text-gray-600 mb-4' }, 
-                                'Make sure the file exists in /data/ folder with format: MDCReport_StoreXXXX_YYYY-MM-DD.xlsx'
-                            ),
                             React.createElement('button', {
                                 className: 'bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700',
                                 onClick: () => window.location.reload()
@@ -648,18 +79,17 @@
                     );
                 }
                 
+                const goodEmployees = employees.filter(emp => emp.status === 'good');
+                
                 return React.createElement('div', {
                     className: 'min-h-screen bg-white text-gray-800'
                 },
-                    // Green Glowing Ticker for Good Employees
+                    // Green Ticker
                     goodEmployees.length > 0 ? React.createElement('div', { 
                         className: 'ticker-container border-b-2 border-green-400 py-4' 
                     },
                         React.createElement('div', { className: 'ticker-content text-green-800 font-bold text-xl' },
-                            `${goodEmployees.length} Employees Current and Good! ` +
-                            tickerEmployees.map((emp, index) => 
-                                `⭐ ${emp.displayName} - ${emp.totalCompleted} modules ⭐ `
-                            ).join('   ')
+                            goodEmployees.length + ' Employees Current and Good! ⭐ Test U. - 45 modules ⭐'
                         )
                     ) : null,
 
@@ -668,7 +98,7 @@
                         React.createElement('div', { className: 'mb-8' },
                             React.createElement('div', { className: 'flex items-center justify-between' },
                                 React.createElement('div', null,
-                                    React.createElement('h1', { className: 'text-4xl font-bold text-gray-900' }, `Store ${currentStore} Certification Dashboard`)
+                                    React.createElement('h1', { className: 'text-4xl font-bold text-gray-900' }, 'Store ' + currentStore + ' Certification Dashboard')
                                 ),
                                 React.createElement('div', { className: 'text-right' },
                                     React.createElement('div', { className: 'text-2xl font-mono font-bold text-gray-900' }, currentTime.toLocaleTimeString()),
@@ -677,66 +107,55 @@
                             )
                         ),
                         
-                        // Employee Status Sections
+                        // Test Sections
                         React.createElement('div', { className: 'grid grid-cols-2 gap-8 mb-8' },
-                            // Critical section content here...
                             React.createElement('div', { className: 'bg-gray-50 rounded-2xl p-6 border-2 border-red-300' },
-                                React.createElement('h2', { className: 'text-2xl font-bold text-red-700 mb-6 flex items-center gap-3' }, 
-                                    React.createElement('span', { className: 'text-3xl' }, '🚨'),
-                                    `${[...expiredEmployees, ...criticalEmployees].length} Critical Attention Required (Critical or Expired)`
+                                React.createElement('h2', { className: 'text-2xl font-bold text-red-700 mb-6' }, 
+                                    '0 Critical Attention Required'
                                 ),
                                 React.createElement('div', { className: 'text-center text-green-600 py-24' },
-                                    React.createElement('div', { className: 'text-9xl mb-6' }, '✅'),
-                                    React.createElement('div', { className: 'text-4xl font-bold mb-3' }, 'Test Display'),
-                                    React.createElement('div', { className: 'text-2xl' }, 'Checking syntax...')
+                                    React.createElement('div', { className: 'text-4xl font-bold' }, 'All Good!')
                                 )
                             ),
-                            
-                            // Warning section
                             React.createElement('div', { className: 'bg-gray-50 rounded-2xl p-6 border-2 border-yellow-400' },
-                                React.createElement('h2', { className: 'text-2xl font-bold text-yellow-700 mb-6 flex items-center gap-3' }, 
-                                    React.createElement('span', { className: 'text-3xl' }, '⚠️'),
-                                    `${warningEmployees.length} Expiring Soon`
+                                React.createElement('h2', { className: 'text-2xl font-bold text-yellow-700 mb-6' }, 
+                                    '0 Expiring Soon'
                                 ),
                                 React.createElement('div', { className: 'text-center text-green-600 py-24' },
-                                    React.createElement('div', { className: 'text-9xl mb-6' }, '✅'),
-                                    React.createElement('div', { className: 'text-4xl font-bold mb-3' }, 'Test Display'),
-                                    React.createElement('div', { className: 'text-2xl' }, 'Checking syntax...')
+                                    React.createElement('div', { className: 'text-4xl font-bold' }, 'All Good!')
                                 )
                             )
                         )
                     ),
                     
-                    // Quarter-End Countdown Section
-                    React.createElement('div', { 
-                        className: `countdown-section countdown-${compliance.level} rounded-2xl p-6 mx-4` 
-                    },
+                    // Countdown Test
+                    React.createElement('div', { className: 'bg-green-100 rounded-2xl p-6 mx-4 border-2 border-green-500' },
                         React.createElement('div', { className: 'text-center' },
                             React.createElement('div', { className: 'text-4xl font-bold mb-2 text-gray-900' }, 
-                                `📅 ${quarterName} ENDS IN: ${daysLeft} DAYS, ${hoursLeft} HOURS`
+                                'Q3 ENDS IN: 32 DAYS, 14 HOURS'
                             ),
                             React.createElement('div', { className: 'text-2xl font-bold mb-2 text-gray-900' }, 
-                                '🎯 MUST BE 100% COMPLIANT'
+                                'MUST BE 100% COMPLIANT'
                             ),
                             React.createElement('div', { className: 'text-xl font-semibold text-gray-900' }, 
-                                `Current Status: ${compliance.percentage}% - ${compliance.message}`
+                                'Current Status: 100% - All Good!'
                             )
                         )
                     ),
                     
-                    // Store navigation at bottom
-                    React.createElement('div', { className: 'border-t-2 border-gray-200 p-4 bg-gray-50' },
+                    // Store navigation
+                    React.createElement('div', { className: 'border-t-2 border-gray-200 p-4 bg-gray-50 mt-6' },
                         React.createElement('div', { className: 'flex flex-wrap gap-3 justify-center' },
-                            ['609', '1002', '1257', '1270', '1396', '1932', '2911', '4182'].map(store =>
+                            ['609', '1002', '1257', '1270'].map(store =>
                                 React.createElement('a', {
                                     key: store,
-                                    href: `?store=${store}`,
-                                    className: `px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${store === currentStore ? 'bg-red-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`
-                                }, `Store ${store}`)
+                                    href: '?store=' + store,
+                                    className: 'px-4 py-2 rounded-lg text-sm font-semibold ' + (store === currentStore ? 'bg-red-600 text-white' : 'bg-gray-200 text-gray-700')
+                                }, 'Store ' + store)
                             )
                         ),
                         React.createElement('div', { className: 'text-center text-gray-500 text-xs mt-3' }, 
-                            `Last Updated: ${currentTime.toLocaleString()} | ${employees.length} employees | Green ticker celebrates success • Smart scrolling shows all data`
+                            'Last Updated: ' + currentTime.toLocaleString() + ' | Testing basic structure'
                         )
                     )
                 );
