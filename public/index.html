@@ -46,6 +46,7 @@
                 const [employees, setEmployees] = useState([]);
                 const [storeInfo, setStoreInfo] = useState({});
                 const [loading, setLoading] = useState(true);
+                const [error, setError] = useState(null);
                 const [tickerEmployees, setTickerEmployees] = useState([]);
                 
                 const urlParams = new URLSearchParams(window.location.search);
