@@ -183,13 +183,35 @@
                         setLoading(true);
                         setError(null);
                         
-                        // Try to load the current file format
                         const today = new Date().toISOString().split('T')[0];
-                        const filename = `MDCReport_Store${storeNumber}_${today}.xlsx`;
                         
-                        const response = await fetch(`/data/${filename}`);
-                        if (!response.ok) {
-                            throw new Error(`Could not load ${filename}: ${response.status}`);
+                        // Try multiple filename patterns
+                        const possibleFilenames = [
+                            `MDCReport_Store${storeNumber}_${today}.xlsx`,
+                            `MDCReport${storeNumber}${today.replace(/-/g, '')}_065839.xlsx`,
+                            `MDCReport_Store${storeNumber}_${today.replace(/-/g, '')}.xlsx`
+                        ];
+                        
+                        let response = null;
+                        let filename = null;
+                        let lastError = null;
+                        
+                        for (const tryFilename of possibleFilenames) {
+                            try {
+                                console.log(`Trying to load: ${tryFilename}`);
+                                response = await fetch(`/data/${tryFilename}`);
+                                if (response.ok) {
+                                    filename = tryFilename;
+                                    break;
+                                }
+                                lastError = `${tryFilename}: ${response.status}`;
+                            } catch (err) {
+                                lastError = `${tryFilename}: ${err.message}`;
+                            }
+                        }
+                        
+                        if (!response || !response.ok) {
+                            throw new Error(`Could not load any file variants. Last error: ${lastError}. Tried: ${possibleFilenames.join(', ')}`);
                         }
                         
                         const arrayBuffer = await response.arrayBuffer();
@@ -427,7 +449,7 @@
                             React.createElement('div', { className: 'text-2xl font-bold mb-4' }, 'Error Loading Data'),
                             React.createElement('div', { className: 'mb-4 text-sm bg-red-800 p-4 rounded' }, error),
                             React.createElement('div', { className: 'text-sm text-red-200 mb-4' }, 
-                                'Make sure the file exists in /data/ folder with format: MDCReportSTORE#YYYYMMDD_HHMMSS.xlsx'
+                                'Tried multiple file formats. Check browser console for details. Files should be in /data/ folder.'
                             ),
                             React.createElement('button', {
                                 className: 'bg-white text-red-800 px-4 py-2 rounded',
