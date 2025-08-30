@@ -78,14 +78,40 @@
                     return () => clearInterval(interval);
                 }, [employees]);
 
+                const findLatestDataFile = async (baseFilename) => {
+                    // Try dates in descending order: today, yesterday, day before
+                    const today = new Date();
+                    const dates = [];
+                    
+                    for (let i = 0; i < 7; i++) {
+                        const date = new Date(today);
+                        date.setDate(date.getDate() - i);
+                        dates.push(date.toISOString().split('T')[0]);
+                    }
+                    
+                    for (const date of dates) {
+                        const filename = baseFilename.replace('{DATE}', date);
+                        try {
+                            const response = await fetch('/data/' + filename, { method: 'HEAD' });
+                            if (response.ok) {
+                                console.log('Found latest file:', filename);
+                                return { filename, date };
+                            }
+                        } catch (err) {
+                            // Continue to next date
+                        }
+                    }
+                    
+                    throw new Error('No data files found for the last 7 days');
+                };
+
                 const loadFranchiseDashboard = async () => {
                     try {
-                        const today = new Date().toISOString().split('T')[0];
-                        const filename = 'FranchiseDashboard_' + today + '.xlsx';
+                        const result = await findLatestDataFile('FranchiseDashboard_{DATE}.xlsx');
                         
-                        const response = await fetch('/data/' + filename);
+                        const response = await fetch('/data/' + result.filename);
                         if (!response.ok) {
-                            console.warn('Could not load franchise dashboard:', filename);
+                            console.warn('Could not load franchise dashboard:', result.filename);
                             return;
                         }
                         
@@ -94,7 +120,7 @@
                         const worksheet = workbook.Sheets[workbook.SheetNames[0]];
                         const rawData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
                         
-                        console.log('Franchise dashboard loaded, rows:', rawData.length);
+                        console.log('Franchise dashboard loaded from', result.date, ', rows:', rawData.length);
                         
                         // Find the store row in the franchise data
                         const storeRow = rawData.find(row => row[2] && row[2].toString() === currentStore);
@@ -126,12 +152,11 @@
                         setLoading(true);
                         setError(null);
                         
-                        const today = new Date().toISOString().split('T')[0];
-                        const filename = 'MDCReport_Store' + storeNumber + '_' + today + '.xlsx';
+                        const result = await findLatestDataFile('MDCReport_Store' + storeNumber + '_{DATE}.xlsx');
                         
-                        const response = await fetch('/data/' + filename);
+                        const response = await fetch('/data/' + result.filename);
                         if (!response.ok) {
-                            throw new Error('Could not load ' + filename + ': ' + response.status);
+                            throw new Error('Could not load ' + result.filename + ': ' + response.status);
                         }
                         
                         const arrayBuffer = await response.arrayBuffer();
@@ -139,7 +164,7 @@
                         const worksheet = workbook.Sheets[workbook.SheetNames[0]];
                         const rawData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
                         
-                        console.log('Raw data rows:', rawData.length);
+                        console.log('Store data loaded from', result.date, ', rows:', rawData.length);
                         
                         const processedEmployees = [];
                         
