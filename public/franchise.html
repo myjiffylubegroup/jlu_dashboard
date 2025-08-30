@@ -53,16 +53,46 @@
                     loadAllStoreData();
                 }, []);
 
+                const findLatestDataFile = async (baseFilename) => {
+                    // Try dates in descending order: today, yesterday, day before
+                    const today = new Date();
+                    const dates = [];
+                    
+                    for (let i = 0; i < 7; i++) {
+                        const date = new Date(today);
+                        date.setDate(date.getDate() - i);
+                        dates.push(date.toISOString().split('T')[0]);
+                    }
+                    
+                    for (const date of dates) {
+                        const filename = baseFilename.replace('{DATE}', date);
+                        try {
+                            const response = await fetch('/data/' + filename, { method: 'HEAD' });
+                            if (response.ok) {
+                                console.log('Found latest file:', filename);
+                                return { filename, date };
+                            }
+                        } catch (err) {
+                            // Continue to next date
+                        }
+                    }
+                    
+                    throw new Error('No data files found for the last 7 days');
+                };
+
                 const loadAllStoreData = async () => {
                     try {
                         setLoading(true);
-                        const today = new Date().toISOString().split('T')[0];
+                        
+                        // Find the latest date with data files
+                        const franchiseResult = await findLatestDataFile('FranchiseDashboard_{DATE}.xlsx');
+                        const dataDate = franchiseResult.date;
                         
                         // Load franchise dashboard first
-                        await loadFranchiseDashboard(today);
+                        await loadFranchiseDashboard(dataDate);
                         
-                        // Load all store data
-                        const storePromises = stores.map(store => loadStoreData(store, today));
+                        // Load all store data using the same date
+                        const storePromises = stores.map(store => loadStoreData(store, dataDate));
                         const storeResults = await Promise.all(storePromises);
                         
                         const storesObj = {};
@@ -73,6 +103,7 @@
                         });
                         
                         setStoresData(storesObj);
+                        console.log('All data loaded from date:', dataDate);
                         
                     } catch (err) {
                         setError('Failed to load franchise data: ' + err.message);
@@ -82,7 +113,8 @@
                 };
 
                 const loadFranchiseDashboard = async (date) => {
-                    const response = await fetch('/data/FranchiseDashboard_' + date + '.xlsx');
+                    const filename = 'FranchiseDashboard_' + date + '.xlsx';
+                    const response = await fetch('/data/' + filename);
                     if (!response.ok) return;
                     
                     const arrayBuffer = await response.arrayBuffer();
@@ -90,6 +122,7 @@
                     const worksheet = workbook.Sheets[workbook.SheetNames[0]];
                     const rawData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
                     
+                    console.log('Franchise dashboard loaded from', date);
                     setFranchiseData(rawData);
                 };
 
@@ -97,7 +130,10 @@
                     try {
                         const filename = 'MDCReport_Store' + storeNumber + '_' + date + '.xlsx';
                         const response = await fetch('/data/' + filename);
-                        if (!response.ok) return null;
+                        if (!response.ok) {
+                            console.warn('No data file found for store', storeNumber, 'on', date);
+                            return null;
+                        }
                         
                         const arrayBuffer = await response.arrayBuffer();
                         const workbook = XLSX.read(arrayBuffer);
