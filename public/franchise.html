@@ -103,10 +103,11 @@
                         });
                         
                         setStoresData(storesObj);
-                        console.log('All data loaded from date:', dataDate);
+                        console.log('All franchise data loaded from date:', dataDate);
                         
                     } catch (err) {
                         setError('Failed to load franchise data: ' + err.message);
+                        console.error('Franchise load error:', err);
                     } finally {
                         setLoading(false);
                     }
@@ -413,7 +414,7 @@
                                     
                                     return React.createElement('a', {
                                         key: storeNum,
-                                        href: 'store-dashboard.html?store=' + storeNum,
+                                        href: 'https://jlu-dashboard.onrender.com/?store=' + storeNum,
                                         className: 'block bg-white rounded-lg p-4 border-2 border-gray-200 hover:border-blue-400 hover:shadow-lg transition-all duration-200 ' + 
                                                   (statusLevel === 'critical' ? 'urgent-pulse' : '')
                                     },
